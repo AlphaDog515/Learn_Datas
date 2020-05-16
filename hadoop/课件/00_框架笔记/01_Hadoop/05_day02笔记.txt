@@ -1,0 +1,346 @@
+复习
+一、大数据
+1.含义
+		大数据指在一定时间范围内使用常规的软件无法处理的数据集合！
+		
+2.特点
+		①海量
+		②高增长率
+		③多样性
+		④低价值密度
+	
+	
+二、Hadoop
+1.含义
+	狭义： Hadoop只代表hadoop框架本身！
+	广义： hadoop代表整个hadoop体系，由hadoop框架和其他依赖于hadoop的其他框架共同组成！
+		
+2.hadoop的组成
+	2.x版本
+
+	HDFS: 负责大数据存储的一个分布式文件系统！
+	YARN: 负责为大数据计算程序提供资源申请，管理和调度的框架！
+
+	MapReduce: 编程框架
+	Common:  常用的工具包
+
+2.x版本和1.x版本的区别：
+	在1.x版本，MR既负责运行MR程序还负责为MR程序申请资源！Hadoop集群只能为自身的MR程序提供服务！
+	在2.x版本，MR只负责MR程序的计算，资源的调度和管理由YARN负责！
+		Hadoop集群，不仅能为自身的MR程序提供服务！
+		还可以为第三方计算引擎，例如TeZ,Spark,Flink等提供计算资源的调度服务！
+
+
+		
+三、HDFS中的核心进程
+
+1.核心进程
+	Namenode(1个):  负责HDFS上所有文件元数据的管理！
+					元数据：文件的属性(文件名，大小，创建时间，所属主，由哪些块组成)
+						
+					职责：  ①负责接受客户端的所有请求
+							②负责接受DN上报的块信息
+							③负责向DN分配任务，例如维护文件的副本数等
+						
+	Datanode（N个）: 负责HDFS上所有文件数据的存储！
+	
+	SecondaryNamenode(N个): 负责协助Namenode工作！
+		
+		
+四、YARN中的核心进程
+
+1.核心进程
+		ResourceManager(1个)： 	负责整个集群所有资源的管理和调度！
+						职责： 	①负责接受客户端的所有请求
+								②负责接受NM上报的块信息
+								③负责向NM分配任务，例如检查NM是否健康，是否在线等
+		
+		NodeManager(N个)： 负责当前机器所有资源的管理和调度！
+	
+
+	
+五、MapReduce中的核心进程
+
+1.MapReduce是一个编程模型！这个模型由两个阶段组成，一个称为Map阶段，另一个称为Reduce阶段！
+		在Map阶段和Reduce阶段分别启动若干进程负责运算！这些进程称为Task!
+		
+		在Map阶段启动的Task称为MapTask!
+		在Reduce阶段启动的Task称为ReduceTask!
+		
+		将一个MapReduce程序称为一个Job!
+		
+		一个Job中会启动若干个Task!
+		
+		在Job启动时，Job会先创建一个MRAppMaster进程，由这个进程和RM进行通信，为Job中的每个Task申请
+		计算所需要的资源！
+		
+		Task的请求，会被RM缓存到一个调度队列中，由NM领取Task，领取后NM会根据Task要求，提供计算资源！
+		提供后，为了避免计算资源在当前Task使用时被其他的task抢占，NM会将资源封装到一个Container中！
+		
+		Container可以对计算资源进行隔离！
+	
+	
+六、安装
+1.环境要求
+		必须保证已经安装了JDK，有JAVA_HOME环境变量！
+	
+2.安装
+		解压在linux下编译的Hadoop！
+	
+3. 建议将HADOOP_HOME提升为全局变量！
+		后续的HADOOP体系中的所有的框架，都通过HADOOP_HOME找到hadoop的安装目录！
+		将bin,sbin目录配置到PATH中！
+		
+4.目录结构
+		bin:   常用的工具hadoop所在的目录
+		sbin:  提供对集群的管理功能，例如启动和停止进程！
+		etc:   默认的配置文件目录
+		
+七、使用
+1. 配置文件
+		hadoop有4个默认我配置文件，这4个文件会随着Hadoop启动时，自动加载！
+		
+		如果希望对这4个文件加载的默认属性进行覆盖！用户需要自定义配置文件！
+		
+		文件格式： 
+				core-site.xml----->core-default.xml
+				hdfs-site.xml----->hdfs-default.xml
+				yarn-site.xml----->yarn-default.xml
+				mapred-site.xml----->mapred-default.xml
+				
+		配置文件的位置：
+				自定义位置：  hadoop --confdir 配置文件的目录
+				默认配置文件目录：  $HADOOP_HOME/etc/hadoop
+				
+2.HDFS的运行模式
+		
+		①本地模式：   使用当前计算机的文件系统作为HDFS的文件系统！
+					  fs.defaultFS=file:///(默认)
+					  
+		②分布式文件系统：通过运行NN,DN等进程，由这些进程组成一个分布式的系统，进行文件的读写！
+					     fs.defaultFS=hdfs://NN所在的主机名:9000
+					
+			
+3.启动一个分布式文件系统
+①在$HADOOP_HOME/etc/hadoop，配置core-site.xml
+		fs.defaultFS=hdfs://NN所在的主机名:9000
+		
+②配置Hadoop默认的工作目录，在$HADOOP_HOME/etc/hadoop，配置core-site.xml
+		hadoop.tmp.dir=配置一个当前用户有写权限的非tmp目录
+		
+③格式化NN
+		hadoop namenode -format
+		目的： ①生成NN的工作目录
+               ②在工作目录下生成NN所要使用的特殊的文件，例如VERSION，fsiamge000000
+	
+	注意： 一个集群搭建完成后，只需要格式化一次！
+	
+	
+④启动
+		hadoop-daemon.sh start namenode|datanode
+
+		
+⑤查看
+		jps
+		http://NN所运行的主机名:50070
+		
+		
+		
+4.MR的运行模式
+		本地模式：  在本机使用多线程的方式模拟多个Task的运行！
+						mapreduce.framework.name=local(默认)
+		分布式模式：在YARN上运行！
+						mapreduce.framework.name=yarn(默认)
+						
+5.配置MR在yarn上运行
+①在$HADOOP_HOME/etc/hadoop，配置mapred-site.xml
+		mapreduce.framework.name=yarn
+		
+②配置YARN
+		在$HADOOP_HOME/etc/hadoop，配置yarn-site.xml
+		配置yarn.resourcemanager.hostname=RM运行的主机名
+			yarn.xxxx-auxservice=mapreduce_shuffle
+			
+③启动YARN
+		yarn-daemon.sh start resourcemanager | nodemanager
+		
+		
+④查看
+		jps
+		http://rm所运行的主机名:8088
+		
+		
+⑤提交作业
+		hadoop  jar  xxx.jar 主类名  输入目录..  输出目录
+		
+		要去： 输出目录必须不存在
+			   输入目录中必须全部是文件
+			
+		
+			   
+		
+一、完全分布式集群
+1.规划
+	Hadoop中的进程在多台机器运行！
+
+	HDFS:  1个nn+N个DN
+		   n个2nn
+	YARN:  1个RM+N个NM
+	
+	避免单点故障，NN和RM建议分散到多台机器！
+	注意负载均衡
+	
+	hadoop101  hadoop102   hadoop103
+	DN			DN			DN
+	NM			NM			NM
+	NN			RM			2NN
+
+	
+2.准备集群，安装软件
+①克隆三台虚拟机
+		a)在每台机器的/etc/hosts中配置集群所有机器的ip和主机名的映射
+		b)提供atguigu用户，配置atguigu用户具有root权限
+		c)保证三台机器可以互相联通
+②安装软件，在一台机器安装，再将这台机器的软件复制到其他机器
+
+
+
+二、常用命令
+
+1. scp（安全拷贝）
+		全量复制！
+		使用： scp -r  源文件用户名A@主机名1：path1 目标文件用户名B@主机名2：path2
+					-r: 递归，复制目录
+				
+					如果从本机执行读取或写入，用户名B@主机名2：可以省略！
+		
+		在主机1上，使用A用户读取path1的文件，再使用用户B登录到主机2，在主机2的path2路径执行写入！
+		
+		要求： 用户名A@主机名1 对path1有读权限
+			   用户名B@主机名2 对path2有写权限
+			   
+2. rsync （远程同步）
+		可以只同步变化的文件(对比文件的修改时间)！增量同步！
+		
+		使用： rsync -rvlt   path1  目标文件用户名B@主机名2：path2
+				-r:  递归，复制目录
+				-v： 显示复制的过程
+				-l:  同步软连接
+				-t:  基于文件的修改时间进行对比，只同步修改时间不同的文件
+				
+		只能将本机的文件同步到其他机器！The source and destination cannot both be remote.
+		
+		注意： rsync -rvlt  path1  目标文件用户名B@主机名2：path2		
+			path1是个目录，目录以/结尾，只会同步目录中的内容，不会同步目录本身！
+			path1是个目录，目录不以/结尾，同步目录中的内容，也会同步目录本身！
+			
+			
+3. 免输入密码登录，借助SSH实现
+		举例：  A机器的a用户，希望在A机器上，使用b用户的身份登录到B机器！
+		
+				实现步骤： ①A机器的a用户，在A机器上生成一对密钥
+									ssh-keygen -t rsa
+									
+						   ②密钥分为公钥和私钥，a用户需要将公钥拷贝到B机器上b用户的家目录下的
+								authorithxxxx_keys
+									a)使用b用户登录到B机器
+									b)编辑authorithxxxx_keys，将公钥的内容进行添加
+									
+								在A机器，使用a用户执行以下命令： ssh-copy-id  b@B
+								
+						   ③A机器的a用户，可以使用 ssh  b@B进行登录！
+						   
+				注意： 如果使用ssh 直接登录 主机名
+							默认使用当前用户对目标主机进行登录！
+							
+4. 编写同步脚本xsync
+		作用： 将当前机器的文件，同步到集群所有机器的相同路径下！
+					hadoop102:/A/a , 执行脚本后，将此文件同步到集群中所有机器的 /A/a
+		
+		用户在使用xsync时，只需要传入要同步的文件即可
+				xysnc a 
+				不管a是一个相对路径还是绝对路径，都需要将a转换为绝对路径！
+				
+		文件的绝对路径：  
+				父路径：  dirpath=$(cd `dirname /home/atguigu/hi`; pwd -P)
+				文件名：  filename=`basename hi`
+				
+					
+		核心命令：  
+				for(())
+				do
+					rsync -rvlt path1 
+				done
+									
+									
+		
+
+
+
+
+
+
+
+
+
+			   
+		
+
+
+
+
+
+
+一、使用ssh执行命令
+
+①ssh 目标机器 
+		登录之后，执行某个命令！
+		属于Login-shell，会自动读取 /etc/profile文件中定义的所有的变量！
+		
+②ssh 目标机器  命令
+		属于non-login-shell
+		不会读取/etc/profile
+		
+		如果在使用命令时，我们需要使用/etc/profile定义的一些变量，需要在
+		目标机器的对应的用户的家目录/.bashrc中添加以下代码
+		
+		source /etc/profile
+		
+		如果不添加以上代码，在执行start-all.sh | stop-all.sh一定会报错！
+		
+二、启动Hadoop
+HDFS
+	①需要在NN所配置的节点进行格式化
+	②在不同的节点启动不同的进程
+	
+三、运行群起脚本
+①群起脚本的原理是获取集群中所有的节点的主机名
+		默认读取当前机器 HADOOP_HOME/etc/hadoop/slaves，获取集群中所有的节点的主机名
+		
+②循环执行 ssh 主机名 hadoop-daemon.sh start xxx
+		保证当前机器到其他节点，已经配置了ssh免密登录
+		保证集群中所有当前用户的家目录/.bashrc中，已经配置source /etc/profile
+		
+注意：  start-all.sh时，其实分别调用了start-dfs.sh和start-yarn.sh
+			start-dfs.sh可以在集群的任意一台机器使用！可以启动HDFS中的所有进程！
+			start-yarn.sh在集群的非RM所在的机器使用，不会启动resourcemanager!
+			
+		建议： 只需要配置RM所在机器到其他机器的SSH免密登录！
+				都在RM所在的机器执行群起和群停脚本！
+				xsync和xcall只放在RM所在的机器即可！
+	
+
+
+
+
+
+
+		
+		
+
+
+
+
+
+
+

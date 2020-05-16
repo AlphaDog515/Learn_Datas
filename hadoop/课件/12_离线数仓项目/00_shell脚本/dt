@@ -1,0 +1,15 @@
+#/bin/bash
+#在hadoop102和hadoop103上同步日期为指定的日期
+if(($#==0))
+then
+	echo 请输入要修改的时间!
+	exit;
+fi
+
+#修改系统时间
+for i in hadoop102 hadoop103 hadoop104
+do
+	echo ------------同步$i时间--------------
+	ssh $i "sudo date -s '$@'"
+done
+

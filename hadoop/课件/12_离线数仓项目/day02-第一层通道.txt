@@ -1,0 +1,175 @@
+复习
+一、Sqoop的导出
+1.命令格式
+	sqoop  export [参数]...
+	
+	hive和hdfs上的数据可以直接导出到mysql，
+	hbase的数据需要先运行MR将hbase的数据导出到HDFS，再导出到mysql
+		
+2.重要的参数
+	普通的export导出适用的情况是向一个空表导出数据！如果表中有数据，那么保证导出的数据
+	不会触犯表定义的约束！如果触犯了约束，此时可以使用以下两个参数！
+	普通的export是将导出的数据使用insert语句插入到目标表！
+
+	--update-key 主键列/唯一列(唯一约束的列)
+				 使用哪一列来判断数据重复
+				 
+	--update-mode
+				updateonly(默认):  将所有的insert语句转为update语句，对于重复的数据只更新！ 
+				allowinsert:   对于重复的数据进行更新，新的数据进行插入！
+			
+二、脚本格式运行
+	注意：  如果以脚本形式运行Sqoop，需要将Sqoop命令编写在配置文件中，配置文件中
+			参数名和参数值之间需要换行！
+
+
+一、日志的输出
+1. 当执行一个命令时，如果此条命令有输出，可以使用 > 符号，将输出定向到某个文件中
+		此时标准输出就不向屏幕输出了！
+		
+2. Linux中的IO设备
+	在linux中，有三个常用的IO设备
+	0： 代表标准输入。类似Java中的System.in.scan()
+			接受用户的输入
+			
+	1:  代表标准输出。类似Java中的System.out.print()
+			接受程序的标注输出（正常输出）
+			
+	2:  代表错误输出。类似Java中的System.err.print()
+			接受程序报错时输出的信息
+				
+	/dev/null : 俗称黑洞，如果输出中消息不希望使用，可以定向输出到此设备
+	如：pwd > /dev/null将pwd命令的执行结果输出至黑洞
+				
+	命令 > 文件： 执行命令，将命令的标注输出定向到文件中！
+	命令 > 文件   等价于  命令 1> 文件【注意没有空格】
+	
+	pwd 2> c.log ： 将pwd的错误消息定向到c.log，没有报错，消息还是使用标注输出在控制台输出！
+					目录下产生c.log文件
+	
+	pwd 1> c.log 2> c.log 等价于 pwd 1> e.log 2>&1【2>&1不能加空格】
+		pwd程序的标准输出和错误输出都输出到c.log
+	
+	例如：
+	bash a.sh > temp.txt 不会追加错误的信息，等价于：bash a.sh 1> temp.txt 
+	bash a.sh 1>temp.txt 2> err.txt
+	hive -e 'select * from stu' 2> temp.err 
+	
+	
+3. 让进程在后台执行
+		命令 & 
+			
+4. 通过修改系统时间，模拟生成不同日期的数据【见脚本】
+		
+5. 在shell中如果传入的参数中有空格如何处理
+	如果参数有空格，需要加上引号，将整个参数连同空格作为整体！
+	双引号，可以识别$等特殊符号
+	单引号，无法识别$等特殊符号
+	
+	单双引号的嵌套：
+		最外层是单引号，嵌套双引号，无法识别$等特殊字符，认为最内层的双引号失去了解析$的作用！
+		最外层是双引号，$被嵌套在单引号中，依然是可以解析$
+
+		
+二、安装Hadoop
+1.安装LZO压缩
+	com.hadoop.compression.lzo.LzoCodec
+	com.hadoop.compression.lzo.LzopCodec
+		LzopCodec是LzoCodec的升级版！LzopCodec会压缩的文件中添加一些header信息，
+			保存压缩的元数据！
+		LzoCodec----> .lzo_deflate
+		LzopCodec---> .lzo
+		
+		.lzo_deflate格式的压缩文件，作为MR的输入时，无法使用程序对此文件进行切片！
+		.lzo_deflate格式被Mapper读取时，会乱码！
+		
+		一般都使用LzopCodec格式！尤其作为reduce的输出时，一定用LzopCodec！
+		在shuffle阶段的话，用哪个都行！				
+
+
+		
+一、第一层采集通道的编写
+1.第一层采集脚本Source的选择
+	①Source:
+			数据源在日志文件中!
+				读取日志中的数据，可以使用以下Source
+					ExecSource:  可以执行一个linux命令，例如tail -f 日志文件，
+						将读取的到的数据封装为Event！
+						不用！不安全，可能丢数据！
+					
+					SpoolingDirSource:  可以读取一个目录中的文本文件！
+						保证目录中没有重名的文件！
+						保证目录中的文件都是封闭状态，一旦放入目录中，不能再继续写入！
+						每个日志封闭后，才能放入到SpoolingDir，不然agent就故障！
+					
+					TailDirSource: 接近实时第读取指定的文件！断点续传功能！
+						使用此Source!
+						
+			使用TailDirSource
+		
+	②Channel:
+	KafkaChannel:
+		优点：  基于kafka的副本功能，提供了高可用性！event被存储在kafka中！
+				即便agent挂掉或broker挂掉，依然可以让sink从channel中读取数据！
+			
+		应用场景：
+			①KafkaChannel和sink和source一起使用，单纯作为channel。
+			②KafkaChannel+拦截器+Source，只要Source把数据写入到kafka就完成，
+				可以新起消费者进行消费！KafkaChannel提供生产者！
+					目前使用的场景！【不需要配置消费者有关的参数】
+			③KafkaChannel+sink，使用flume将kafka中的数据写入到其他的目的地，例如hdfs!
+			
+			为了在上述场景工作，KafkaChannel可以配置生产者和消费者的参数！
+			
+		配置参数：
+			①在channel层面的参数，例如channel的类型，channel的容量等，需要和之前一样，
+				在channel层面配置，例如：a1.channel.k1.type
+			
+			②和kafka集群相关的参数，需要在channel层面配置后，再加上kafka.
+				例如： a1.channels.k1.kafka.topic ： 向哪个主题发送数据
+					   a1.channels.k1.kafka.bootstrap.servers： 集群地址
+			
+			③和Produer和Consumer相关的参数，需要加上produer和consumer的前缀：
+				例如：a1.channels.k1.kafka.producer.acks=all
+					  a1.channels.k1.kafka.consumer.group.id=atguigu
+					  
+		必须的配置：
+			type=org.apache.flume.channel.kafka.KafkaChannel
+			kafka.bootstrap.servers
+		
+		可选：
+		kafka.topic： 生成到哪个主题
+		parseAsFlumeEvent=true(默认)： 
+			如果parseAsFlumeEvent=true，kafkaChannel会把数据以flume中Event的结构作为参考，
+			把event中的header+body放入ProducerRecord的value中！
+			
+			如果parseAsFlumeEvent=false，kafkaChannel会把数据以flume中Event的结构作为参考，
+			把event中body放入ProducerRecord的value中！
+				
+		a1.channels.k1.kafka.producer.acks=0
+
+	
+2. 拦截器
+		日志数据有两种类型，一种是事件日志，格式 时间戳|{"ap":xx,"cm":{},"et":[{},{}]}
+		另一种是启动日志，格式：{"en":"start"}
+		
+		在1个source对接两个KafkaChannel时，需要使用MulitPlexing Channel Selector，
+		将启动日志，分配到启动日志所在的Chanel，将事件日志分配到事件日志所在的Channel！
+		
+		MulitPlexing Channel Selector根据event，header中指定key的映射，来分配！
+		
+		需要自定义拦截器，根据不同的数据类型，在每个Event对象的header中添加key！
+		
+		功能： ①为每个Event，在header中添加key
+			   ②过滤不符合要求的数据(格式有损坏)
+					启动日志： {},验证JSON字符串的完整性，是否以{}开头结尾
+					
+					事件日志： 时间戳|{}
+						时间戳需要合法：
+							a)长度合法(13位)
+							b)都是数字
+						验证JSON字符串的完整性，是否以{}开头结尾
+							
+						
+				
+				

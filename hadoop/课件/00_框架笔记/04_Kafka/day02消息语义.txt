@@ -1,0 +1,304 @@
+复习
+一、自定义拦截器
+1. 自定义类实现 Interceptor接口，实现其中的intercepts()
+2. 在自定义的类中提供一个Builder，通过Builder.build()返回拦截器对象
+3. 在配置时，需要配置的拦截器的type必须些微 拦截器全类名$Builder
+
+二、自定义Sink
+1.  自定义类继承AbstractSink，实现Configurable 
+2.  核心方法还是process()
+		返回值必须是Status对象！
+			READY:  从channel中获取了一个或多个event对象，返回ready
+			BACKOFF: 从channel中获取了0个event对象，返回BACKOFF
+			
+		一般处理步骤：
+			①获取sink对接的channel
+			②从channel获取Transaction对象
+			③声明一个Event
+			④开启事务
+			⑤调用channel.take()从channel中获取一个event，
+				获取后，可以通过对event是否为null的判断，
+				来决定当前是否已经取到event
+				取到之后执行sink写出的逻辑
+			⑥提交事务
+			⑦一旦上述操作有异常，回滚事务
+			⑧最终，关闭事务对象
+
+			
+三、对Flume的监控
+1.监控的原理
+		任何对一个Java进程中，对象属性的监控都需要遵循JMX标准！
+		Flume已经提供了对JMX标准的实现，我们只需要使用合适的客户端获取MBean的信息即可！
+		
+2.客户端的实现
+		①使用Jconsole
+		②使用web浏览器发送一个HTTP请求，获取JSON格式的Mbean信息
+		③使用第三方框架，例如ganglia
+		
+		开源方案：  JXMTrans(采集MBean)+InfluxDB(存储Mbean)+Graffna(可视化)
+					E(Es)L(logstash)K(kibana)
+
+
+					
+四、Kafka
+	kafka是一个分布式的消息队列，基于发布订阅模式设计，为流式计算的应用提供接近实时的数据传输！
+
+1.核心概念
+	①broker: 一个kafka的服务端实例
+	②cluster:  多个服务端实例组成一个集群
+	③producer:  负责生成数据的生成者
+	④consumer:  负责消费数据的消费者
+	⑤consumer group:  可以为消费者分配消费者组，一个组内可以同时有多个消费者，提高并行消费能力
+	⑥topic:  数据必须分类存储，分topic存放，topic是一个逻辑上的概念
+	⑦partition: 分区，一个主题下可以有多个分区，数据最终要存放到具体某个分区的目录中
+	⑧offset:  每个分区中存入的消息会有一个offset(偏移量)，每个分区的offset一定随着消息存入的先后顺序递增
+
+2.kafka为了数据的安全，有容错机制
+	kafka可以指定一个主题的分区，保存多个副本！
+		
+	如果一个分区有多个副本，此时从副本中挑选其中的一个副本作为leader，其余作为follower!
+	只有leader可以接收客户端的读写请求，follower只负责同步leader中的数据，保持一致！
+		
+3.kafka的安装
+	①集群模式，那么集群中的每一个broker都需要有唯一的id
+	②kafka依赖于zookeeper存储元数据，配置zookeeper服务端实例的连接地址
+	③启动： 
+		kafka-server-start.sh -daemon server.properties
+	④停止：
+		kafka-server-stop.sh 
+			
+4. 主题操作
+	①创建主题
+		kafka-topics.sh  --zookeeper xxx  
+		--create --topic 主题名 --partitions x --replicas-factor x
+			此种方式，kafka的cluster会采取负载均衡策略，自动为分区分配broker实例！
+			副本数不能超过当前可用的broker的数量！
+			
+		kafka-topics.sh  --zookeeper xxx  
+		--create --topic 主题名 --replicas-assignment  xxxx:xxx,xxx:xxx （不建议）
+			此种方式，是手动指定分区的broker!
+				
+	②删除主题
+			kafka-topics.sh  --zookeeper xxx  --delete --topic 主题名
+			
+	③查询主题
+			kafka-topics.sh  --zookeeper xxx  --list 			
+			kafka-topics.sh  --zookeeper xxx  --describe --topic 主题名
+	
+	④修改主题			
+			修改分区： kafka-topics.sh  --zookeeper xxx  
+			--alter --topic 主题名 --partitions x
+			分区数只增不减
+		
+5. 生产数据
+	生成数据时，生产者就是一个客户端，生产者生成的数据必须指定topic!
+	每条数据，必须有一个value属性，数据在发送到broker时，
+		必须有一个分区，如果没有指定分区，此时系统会自动生成！
+		
+	①分区生成策略
+		a)明确指定了分区，此时就使用指定的分区
+		b)如果没有指定分区，此时查看key是否为null，
+			如果不为null，采用key的hash值 模除 总的分区数，生成分区
+		c)key为null，此时生成一个随机数，用随机数的hash值 模除 总的分区数，生成分区
+			
+	②可以使用kafka提供的一个基于控制台的producer
+		kafka-console-producer.sh  --broker-list xxx  --topic xxx
+			
+6. 消费数据		
+	消费者默认只会从每个分区的最后的位置消费！
+	如果希望从主题的每个分区的最初位置开始消费，需要指定--from-beginning
+		
+	可以使用kafka提供的一个基于控制台的consumer
+		kafka-console-consumer.sh  --bootstap-server xxx  --topic xxx 
+
+
+	
+		
+一、Kafka中的几个概念
+
+	R:  	replicas(副本)
+	AR：	avaliable replicas(可用副本)
+	ISR：	insync replicas(同步的副本)
+	OSR： 	out of sync replicas(不同步的副本)
+
+	ISR和OSR都由leader维护，用户可以设置一个标准replica.lag.time.max.ms，
+	根据这个标准，将符合标准的副本，放入ISR队列，不符合的放入OSR队列！
+	
+	replica.lag.time.max.ms=10（默认）
+	
+	Leader在处理副本的同步请求时，可以记录副本请求的数据的位置！
+		
+	什么时候一个副本会被认为是OSR：
+	①一个副本和zookeeper的上一次通信距离现在已经过了zookeeper.connection.timeout.ms=6000（默认）
+	②副本和leader距离上一次发起同步数据的请求已经过了replica.lag.time.max.ms=10
+	③副本和leader距离上一次发起同步数据的请求没有超过replica.lag.time.max.ms，但是无法同步最新的数据
+
+	否则如果能及时从leader同步数据，这个副本称为ISR
+		OSR+ISR=AR <= R
+
+	leader永远位于ISR！
+	在leader故障时，只会从ISR中选举一个副本称为新的leader!
+
+	
+	
+二、生产者生产消息的安全性
+	在producer端，可以配置acks,有以下三种可选的配置：request.required.acks
+
+	0： 生产者不需要等待broker的ack，效率最快，但是丢失数据的风险最大！
+
+	1:  生成者需要等待broker的ack。【默认设置】
+		leader写完之后，就返回ack确认消息。
+		在leader写完后，响应ack后，如果ISR中的follower没有及时同步消息，
+		此时leader故障，会丢失消息
+		
+	-1(all)：	生成者需要等待broker的ack。
+				不会丢数据，因为leader必须等待ISR中的副本全部写完，才返回ack确认消息，
+				此时有可能会造成数据的重复！【也有可能丢失数据】
+				
+				如果为-1，还要尽可能保证ISR队列中，ISR副本数量不能只为1！
+				通过min.insync.replicas参数进行设置！
+				
+				例如：min.insync.replicas=2，如果此时ISR中只有1个副本，producer在写数据时，
+					会收到一个异常：NoEnoughReplicasException
+					
+
+					
+三、分布式系统中消息的存储语义
+	at most once:   每条消息最多存一次！ 消息存0次或1次     acks=0,1 
+	at least once:  每条消息至少存一次！ 消息存1次或多次   	acks=-1
+	exactly once:   每条消息精确一次！ 	 消息存1次	        enable.idempotence=true
+
+	如果要满足 exactly once，通常情况，我们要求系统在设计时，需要提供幂等性功能！
+
+	幂等性：  一个数字在执行任意幂次后，都相等，称这个数字有幂等性！
+				1具有幂等性
+				
+	在kafka的0.11之后，提供了对数据幂等性的支持！
+			enable.idempotence=true,此时producer在写入数据时，就可以保证exactly once！
+
+			当设置了enable.idempotence=true，此时会将acks=-1，
+			再将producer端的retry(发送失败的重试次数)设为Long的最大值！
+			又开启cluster端对数据的去重功能！
+			
+			分辨数据重复： 在cluster端，每个producer在发送每条消息时，会缓存一个数据
+						   (producerId,partition,sequenceId（当前消息的唯一id）)
+
+
+					   
+
+四、消费者
+1.	消费者在消费时，为了提高消费的速率，可以创建一个消费者组，在组内启动多个消费者
+
+2.	如果创建了消费者组，消费者组只订阅了主题名，没有明确指定要消费主题的哪个分区，此时
+	kafka会采取分区的分配策略，自动为消费者组中的消费者线程，分配分区！
+		
+3.	如果创建了消费者组，消费者组只订阅了主题名，明确指定了要消费哪个分区，
+	此时这种消费者称为独立消费者！【独立消费者指定主题、分区，不自动维护offset】
+			
+4.	独立消费者，在消费数据时，系统是不会自动维护消费的offset!
+	非独立消费者在消费数据时，系统会记录每个消费者组上次消费主题每个分区的offset!
+	如果系统帮非独立消费者记录了每个主题消费的offset，那么当消费者组内加入了新的消费者时，
+		此时会为新的消费者分配分区，新的消费者在分配了分区之后，
+		只会从之前记录的offset位置继续开始消费！
+		
+		
+5. 	非独立消费者组在消费一个主题时，是由系统自动根据分配策略为每个组内的消费者线程分配分区！
+	当主题新增了分区或消费者组内新增了消费者，此时，系统需要重新分配分区，
+		这个过程也称为rebalance(再平衡)！
+	再平衡的目录是为了让组内的消费者负载均衡！
+	
+
+	
+五、分区的分配策略【如何再平衡？】
+	一个consumer group中有多个consumer，一个 topic有多个partition，
+	所以必然会涉及到partition的分配问题，即确定那个partition由哪个consumer来消费。
+	kafka提供了两种分区的分配策略： range(默认) | round_robin
+		
+1.range
+	如何分配：  首先先统计一个消费者组，订阅了哪些主题！
+		以主题为单位，主题的分区数 / 当前订阅此主题消费者个数，根据结果，采用范围分配！
+		
+		假设n=分区数/消费者数量，m=分区数%消费者数量，
+		那么前m个消费者每个分配n+1个分区，
+		后面的（消费者数量-m）个消费者每个分配n个分区。
+		【连在一起】
+				
+	atguigu组有3个消费者[a,b,c]【2个主题三个消费者】
+	a 订阅了  hello2(0,1,2)
+	b 订阅了  hello2(0,1,2)
+	c 订阅了  hello3(0,1,2)					  
+			  
+	a:  hello2-0,hello2-1
+	b:  hello2-2		
+	c:  hello3(0,1,2)
+	
+	假如组中的消费者，都订阅相同的主题，会负载均衡吗？
+	atguigu组有3个消费者[a,b,c]
+	a 订阅了  hello2(0,1,2,4)，hello3(0,1,2,4)，hello4(0,1,2,4)
+	b 订阅了  hello2(0,1,2,4)，hello3(0,1,2,4)，hello4(0,1,2,4)
+	c 订阅了  hello2(0,1,2,4)，hello3(0,1,2,4)，hello4(0,1,2,4)
+	
+	a会分配  hello2(0,1),hello3(0,1),hello4(0,1)
+	比其他消费者，多分配分区！
+	
+	
+	----------------------------------------
+	atguigu组有4个消费者[a,b,c,d]
+	a 订阅了  hello2(0,1,2)
+	b 订阅了  hello2(0,1,2)
+	c 订阅了  hello2(0,1,2)
+	d 订阅了  hello2(0,1,2)
+	
+	d无法分配到分区的，但是一旦a,b,c中有消费者挂掉，引起再平衡，此时d可以分配到分区！
+			
+2. round_rabin
+	如何分配：首先先统计一个消费者组，订阅了哪些主题！
+			  以主题为单位,将主题的分区排序，排序后采取轮询的策略
+			  轮流分配给消费者，如果当前消费者没有订阅这个主题，此时就跳过！			
+					
+	atguigu组有3个消费者[a,b,c]
+	a 订阅了  hello2(0,1,2)
+	b 订阅了  hello2(0,1,2)
+	c 订阅了  hello3(0,1,2)
+	
+	a: hello2-0,hello2-2
+	b: hello2-1
+	c: hello3(0,1,2)			
+				
+					  
+一、消费数据的一致性
+	消费者请求分区的Leader，从Leader上拉取数据！
+	
+	如果一个分区Leader在消费的过程中挂掉，会从ISR中选举一个新的Leader，如何保证选出Leader后，
+	消费者消费的数据，和消费旧的Leader消费的数据是一致的？
+	
+	采用HW机制！	
+	
+	HW(high watermark)：  
+		一个分区的ISR中LEO最小的LEO，称为HW
+		消费者在消费数据时，只能消费HW之前的数据！HW之后的数据是无法消费的！
+
+	LEO(log end offset)： 记录的是每个分区副本当前写入的最后的消息的offset			
+
+			
+	
+	
+	auto.offset.reset： 
+		可理解为kafka consumer读取数据的策略，该参数可填earliest|latest|none,
+		earliest：当各分区下有已提交的offset时，从提交的offset开始消费;
+			无提交的offset时，从头开始消费;
+			
+		latest：当各分区下有已提交的offset时，从提交的offset开始消费;
+			无提交的offset时，消费新产生的该分区下的数据;
+		
+		none：topic各分区都存在已提交的offset时，从offset后开始消费;
+			只要有一个分区不存在已提交的offset，则抛出异常;
+
+
+
+
+
+
+
+
+

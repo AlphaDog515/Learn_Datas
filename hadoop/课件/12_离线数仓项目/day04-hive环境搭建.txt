@@ -1,0 +1,379 @@
+一、数仓分层
+
+	ODS：（原始数据层）： 原始，对采集的数据不做处理！
+	DWD：（明细数据层）： 对原始数据层的数据，展开明细，进行ETL过滤！
+	DWS：（数据服务层）： 基于ADS需要统计的主题，创建宽表
+	ADS：（应用数据层）： 基于DWS的宽表，计算出结果
+
+
+	
+二、搭建数据仓库软件的环境
+	①安装hive
+	②安装HA（高可用的）的mysql【主从复制】
+	③配置hive的元数据存储在mysql中
+	④配置hive的执行引擎为tez
+
+
+三、Mysql的安装
+	1.检查本机是否已经安装了mysql的一些软件包，防止冲突		
+		查询之前安装的MySQL：【大小写都查询】
+		rpm -qa | grep MySQL
+		rpm -qa | grep mysql
+			MySQL-client-5.6.24-1.el6.x86_64
+			MySQL-server-5.6.24-1.el6.x86_64
+
+		cd mysql-libs/ 目录下的结果是：
+			MySQL-client-5.6.24-1.el6.x86_64.rpm
+			MySQL-server-5.6.24-1.el6.x86_64.rpm
+
+		目录下的结果不同，因此在使用rpm查看，或者卸载的时候不要使用tab按键；
+
+		卸载之前安装的MySQL5.5，使用rpm -e --nodeps 软件包，
+			如：sudo rpm -e --nodeps mysql-libs-5.1.73-7.el6.x86_64
+			
+		注意删除/var/lib/mysql		
+		
+		
+
+	2.安装5.6
+		解压：unzip mysql-libs.zip -d /opt/module/
+			进入解压文件夹：先安装服务端，再安装客户端：
+			sudo rpm -ivh MySQL-client-5.6.24-1.el6.x86_64.rpm
+			sudo rpm -ivh MySQL-server-5.6.24-1.el6.x86_64.rpm
+
+			
+	3.配置root用户的密码
+		查看生成的随机密码：sudo cat /root/.mysql_secret
+		使用随机密码登录修改新的密码：mysql -uroot -p随机密码
+			启动服务：sudo service mysql start
+			使用随机密码登录，后修改密码：set password=password('123456');
+	
+	
+	4.配置root用户可以再任意机器登录的帐号
+		①查看本机的所有帐号
+			select host,user,password from mysql.user;
+
+		②删除不是locahost的root用户
+			delete from mysql.user where host <> 'localhost';
+
+			或者：
+				mysql>delete from user where Host='hadoop102';
+				mysql>delete from user where Host='127.0.0.1';
+				mysql>delete from user where Host='::1';
+				【使用drop不用flush: drop user root@’127.0.0.1’】		
+		
+
+		③将host=localhost修改为%
+			update mysql.user set host='%' where user='root';
+	
+		④刷新用户
+			mysql>flush privileges;
+
+		⑤测试root是否可以从localhost主机名登录
+			mysql -uroot -p123456
+
+		⑥测试root是否可以从hadoop103(从外部地址)主机名登录
+			mysql -h hadoop103 -uroot -p123456
+		 
+		⑦查看当前mysql服务器收到了哪些客户端连接请求
+			sudo mysqladmin processlist -uroot -p123456
+
+
+	5.mysql自定义配置文件的存放位置	
+		/etc/my.cnf 
+		/etc/mysql/my.cnf 
+		/usr/etc/my.cnf 
+		~/.my.cnf
+
+
+
+
+四、配置互为主从的MySQL
+	1.到/usr/share/mysql下找mysql服务端配置的模版
+		sudo cp /usr/share/mysql/my-default.cnf /etc/my.cnf
+
+	2.编辑my.cnf：
+		在[mysqld]下配置：
+		server_id=103
+		log-bin=mysql-bin
+		binlog_format=mixed
+		relay_log=mysql-relay
+
+		另外一台，配置也一样，只需要修改servei_id
+
+	3.重启mysql服务
+		sudo service mysql restart
+
+	4.在主机上使用root@localhost登录,授权从机可以使用哪个用户登录
+		GRANT replication slave ON *.* TO 'slave'@'%' IDENTIFIED BY '123456';
+
+	5.查看主机binlog文件的最新位置
+		show master status;
+		注：同步历史数据需要查看binlog偏移：sudo mysqlbinlog  mysql-bin.000001
+			主机错误操作会使得主从挂掉，在从机上执行不能同步的命令，然后重启服务即可!
+		
+
+	6.在从机上执行以下语句【stop slave】
+		change master to master_user='slave', 
+			master_password='123456',
+			master_host='192.168.60.103',
+			master_log_file='mysql-bin.000008',
+			master_log_pos=311;
+
+	7.在从机上开启同步线程
+		start slave;
+
+	8.查看同步线程的状态
+		show slave status \G;
+
+	在从机上将上述步骤执行一遍！
+	
+	
+	
+ 
+五、在hadoop103和hadoop102安装keepalive软件
+	1.安装
+		sudo yum install -y keepalived
+
+	2.配置
+		sudo vim /etc/keepalived/keepalived.conf
+	清空，添加如下内容：
+	! Configuration File for keepalived
+	global_defs {
+		router_id MySQL-ha
+	}
+	vrrp_instance VI_1 {
+		state master #初始状态
+		interface eth0 #网卡
+		virtual_router_id 51 #虚拟路由id
+		priority 100 #优先级
+		advert_int 1 #Keepalived心跳间隔
+		nopreempt #只在高优先级配置，原master恢复之后不重新上位
+		authentication {
+			auth_type PASS #认证相关
+			auth_pass 1111
+		}
+		virtual_ipaddress {
+			192.168.60.100 #虚拟IP，集群中没有的IP
+		}
+	} 
+	#声明虚拟服务器
+	virtual_server 192.168.60.100 3306 {
+		delay_loop 6
+		persistence_timeout 30
+		protocol TCP
+		#声明真实服务器
+		real_server 192.168.60.103 3306 {
+			notify_down /var/lib/mysql/killkeepalived.sh #真实服务故障后调用脚本
+			TCP_CHECK {
+				connect_timeout 3 #超时时间
+				nb_get_retry 1 #重试次数
+				delay_before_retry 1 #重试时间间隔
+			}
+		}
+	}
+
+
+	3.编辑当前机器keepalived检测到mysql故障时的通知脚本
+		sudo vim /var/lib/mysql/killkeepalived.sh
+			添加如下内容：
+			#!/bin/bash
+			#停止当前机器的keepalived进程
+			sudo service keepalived stop
+		为脚本添加可执行权限！
+
+	4.开机自启动keepalived服务
+		sudo chkconfig keepalived on
+
+	5.启动keepalived服务，只需要当前启动，以后都可以开机自启动
+		sudo service keepalived start
+
+	6.查看当前机器是否持有虚拟ip
+		ip a
+		
+	7.sqlyog客户端连接使用虚拟ip连接
+	
+
+	补充：	mysql和keepalived服务都是开机自启动，keepalived服务一启动就需要向mysql的3306端口发送
+			心跳，所以需要保证在开机自启动时，keepalived一定要在mysql启动之后再启动！
+			
+			如何查看一个自启动服务在开机时的启动顺序？
+			所有自启动的开机服务，都会在/etc/init.d下生成一个启动脚本！
+				例如mysql的开机自启动脚本就在 /etc/init.d/mysql
+						chkconfig: 	2345(启动级别，-代表全级别) 
+									64(开机的启动的顺序，号小的先启动) 
+									36(关机时服务停止的顺序) 
+				
+				例如keepalived的开机自启动脚本就在 /etc/init.d/keepalived
+						chkconfig:  - 86 14
+						 
+						64<86
+						 
+	注意：	keepalived.conf修改不正确，会导致xshell无法远程连接，重启虚拟机；
+			先启动MySQL再启动keepalived，可以重启，ip a 查看虚拟IP是否被占用；
+			一台机器keepalived服务挂了，会释放持有的虚拟IP，另一台机器会占用，
+				此时如果当前机器挂了，刚挂了的机器又好了，重新上线的机器会持有虚拟IP；
+		
+			先开启hiveserver2，才能运行DBeaver;
+		
+			添加环境变量以后，需要source /etc/profile一下，另外的也需要重新source一下；
+				 
+			当一个节点上存在另一个节点不存在的数据库时，在一个节点对库表的操作无法同步，
+			因为配置的主从复制是同步命令，一旦命令执行失败，同步失败！
+			
+
+	// 指定主机名登录MySQL
+		mysql -h hadoop103 -uroot -p123456
+		
+		MySQL有关的可能目录：
+		/usr/share/mysql
+		/var/lib/mysql
+		/usr/sbin/mysqld
+		/etc/my.cnf
+		killall mysql 
+		killall mysqld
+
+
+
+		
+六、安装hive
+	1.配置
+		①上传jar包并解压到指定目录: tar -zxvf apache-hive-1.2.1-bin.tar.gz -C /opt/module/
+		②保证环境变量中有JAVA_HOME,HADOOP_HOME,HIVE_HOME
+		③启动Hadoop集群，在HDFS上创建目录/hive/warehouse，修改同组权限可写：
+			hadoop fs -chmod g+w /hive/warehouse
+			
+	
+	2.配置hive的元数据存储在mysql中
+		①拷贝Mysql的驱动到 $HIVE_HOME/lib中			
+			在/opt/software/mysql-libs目录下解压驱动包：
+				tar -zxvf mysql-connector-java-5.1.27.tar.gz
+			复制mysql-connector-java-5.1.27-bin.jar到/opt/module/hive/lib/
+				cp mysql-connector-java-5.1.27-bin.jar /opt/module/hive/lib/
+		
+		②手动创建metastore数据库，编码必须为latin1！
+		
+		③编辑hive-site.xml文件，配置元数据的存储位置，
+			在hive/conf下创建hive-site.xml文件，内容如下：
+			
+		<?xml version="1.0"?>
+		<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+		<configuration>
+			<!-- 关闭元数据检查,防止出现版本不一致 -->
+			<property>
+				<name>hive.metastore.schema.verification</name>
+				<value>false</value>
+			</property>
+
+			<!-- 更改hive计算引擎 -->
+			<property>
+				<name>hive.execution.engine</name>
+				<value>tez</value>
+			</property>
+
+			
+			<property>
+				<name>hive.cli.print.header</name>
+				<value>true</value>
+			</property>
+			<property>
+				<name>hive.cli.print.current.db</name>
+				<value>true</value>
+			</property>
+
+			<property>
+				<name>javax.jdo.option.ConnectionURL</name>
+				<value>jdbc:mysql://192.168.6.100:3306/metastore?createDatabaseIfNotExist=true</value>
+				<description>JDBC connect string for a JDBC metastore</description>
+			</property>
+
+			<property>
+				<name>javax.jdo.option.ConnectionDriverName</name>
+				<value>com.mysql.jdbc.Driver</value>
+				<description>Driver class name for a JDBC metastore</description>
+			</property>
+
+			<property>
+				<name>javax.jdo.option.ConnectionUserName</name>
+				<value>root</value>
+				<description>username to use against metastore database</description>
+			</property>
+
+			<property>
+				<name>javax.jdo.option.ConnectionPassword</name>
+				<value>123456</value>
+				<description>password to use against metastore database</description>
+			</property>
+		</configuration>
+	
+
+		④非必须，hive的log默认存放在/tmp/atguigu/hive.log目录下（当前用户名下）,
+			修改hive的log存放日志到/opt/module/hive/logs
+			
+			修改/opt/module/hive/conf/hive-log4j.properties.template文件名称为hive-log4j.properties
+				mv hive-log4j.properties.template hive-log4j.properties
+			
+			在hive-log4j.properties文件中修改log存放位置
+				hive.log.dir=/opt/module/hive/logs
+
+	
+
+七、安装Tez
+	1. 下载tez的依赖包：http://tez.apache.org，解压缩
+			tar -zxvf apache-tez-0.9.1-bin.tar.gz -C /opt/module
+			mv apache-tez-0.9.1-bin/ tez-0.9.1
+	
+	2. 将apache-tez-0.9.1-bin.tar.gz上传到HDFS的/tez目录下
+			hadoop fs -mkdir /tez
+			hadoop fs -put /opt/software/apache-tez-0.9.1-bin.tar.gz/ /tez
+	
+	
+	3. 在$HIVE_HOME/conf/下面创建一个tez-site.xml文件
+			<?xml version="1.0" encoding="UTF-8"?>
+			<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+			<configuration>
+				<property>
+					<name>tez.lib.uris</name>
+					<value>${fs.defaultFS}/tez/apache-tez-0.9.1-bin.tar.gz</value>
+				</property>
+				<property>
+					 <name>tez.use.cluster.hadoop-libs</name>
+					 <value>true</value>
+				</property>
+				<property>
+					 <name>tez.history.logging.service.class</name>        
+					 <value>org.apache.tez.dag.history.logging.ats.ATSHistoryLoggingService</value>
+				</property>
+			</configuration>	
+	
+	
+	4. 在hive-site.xml文件中添加如下配置，更改hive计算引擎
+			<property>
+				<name>hive.execution.engine</name>
+				<value>tez</value>
+			</property>
+	
+	5. 编写$HIVE_HOME/conf/hive-env.sh，让hive启动时，加载tez的jar包
+	export TEZ_HOME=/opt/module/tez-0.9.1    		  #tez的解压目录
+	export TEZ_JARS=""								  #定义空串变量
+	for jar in `ls $TEZ_HOME |grep jar`; do
+		export TEZ_JARS=$TEZ_JARS:$TEZ_HOME/$jar
+	done
+	
+	for jar in `ls $TEZ_HOME/lib`; do
+		export TEZ_JARS=$TEZ_JARS:$TEZ_HOME/lib/$jar  #以上两步拷贝jar包到TEZ_JARS，这个变量以':'开头
+	done
+	export HIVE_AUX_JARS_PATH=/opt/module/hadoop-2.7.2/share/hadoop/common/hadoop-lzo-0.4.20.jar$TEZ_JARS
+
+	
+	6. 修改yarn-site.xml，关闭虚拟内存检查，tez内存不满足要求不工作，分发
+		<property>
+			<name>yarn.nodemanager.vmem-check-enabled</name>
+			<value>false</value>
+		</property>
+
+	
+	
+	
+	
+

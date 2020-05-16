@@ -1,0 +1,122 @@
+一、Hadoop的安装
+	①Hadoop运行的前提是本机已经安装了JDK，配置JAVA_HOME变量
+	
+	②在Hadoop中启动多种不同类型的进程
+		例如NN,DN，RM,NM，这些进程需要进行通信！
+		在通信时，常用主机名进行通信！
+		
+		在192.168.6.100机器上的DN进程，希望访问192.168.6.104机器的NN进程！
+		需要在集群的每台机器上，配置集群中所有机器的host映射！
+		配置：
+			Linux:   /etc/hosts
+			Windows：  C:\Windows\System32\drivers\etc\hosts
+			
+		不配报错：DNS映射异常，HOST映射异常
+				 
+	③注意权限
+		hadoop框架在运行需要产生很多数据(日志)，数据的保存目录，
+		必须让当前启动hadoop进程的用户拥有写权限！
+			
+	④关闭防火墙，设置开机不自启动
+		service iptables stop
+		chkconfig iptables off
+		
+二、使用普通用户操作
+	①创建普通用户atguigu
+		useradd atguigu
+			
+	②为atgugiu用户设置密码
+		passwd atguigu
+			
+	③赋予atguigu用户root权限
+		vim /etc/sudoers
+			
+	④将/opt目录下创建的soft目录和module目录的所属主修改为atguigu
+		chown -R atguigu:atguigu /opt/soft /opt/module
+			
+			
+三、hadoop的目录介绍
+	bin：  使用Hdfs和运算MR时，常用的目录！
+				常用hadoop命令！
+	sbin:  管理员启动和停止集群使用的命令！
+
+	etc：  hadoop配置文件所在的目录
+
+	
+四、使用HDFS
+	完成大数据的存储！
+	HDFS（hadoop distributed filesystem）
+	
+	HDFS的运行模式：
+		取决于参数：fs.defaultFS=file:///（默认）
+		fs.defaultFS在core-default.xml中！
+			①本地模式(在本机上使用HDFS，使用的就是本机的文件系统)
+					fs.defaultFS=file:///
+			
+			②分布式模式
+					要使用的文件系统是一个分布式的文件系统！
+					一个分布式的文件系统，必须由NN,DN等若干进程共同运行完成文件系统的读写操作！
+					fs.defaultFS=hdfs://
+					
+			启动NN：  hadoop-daemon.sh start namenode
+			停止NN：  hadoop-daemon.sh stop namenode
+			启动DN：  hadoop-daemon.sh start datanode
+			停止DN：  hadoop-daemon.sh stop datanode
+				
+	使用：  hadoop fs  命令  文件路径
+
+	
+五、运行MapReduce
+	完成大数据的计算！
+	①按照MR的规范编写一个程序
+	②将程序打包为jar
+	③运行jar中的程序
+			
+		两种运行模式： 
+			取决于参数：  mapreduce.framework.name=local（默认）
+			①本地模式(在本机上运行MR)   mapreduce.framework.name=local
+				在本机运行MR！在本机使用多线程的方式，运行多个Task!
+			②在YARN上运行  mapreduce.framework.name=yarn
+				将MR提交给YARN，由YARN将Job中的多个task分配到多台机器中，启动container运行task!
+					
+				需要启动YARN，YARN由RM和NM进程组成！
+		
+		
+六、hadoop的配置文件
+	hadoop安装后，hadoop的性能和表现取决于用户的配置！
+	
+	4个默认的配置文件： 
+		位置：HADOOP_HOME/share/xxxx.jar/xxx-default.xml
+		core-default.xml： 设置hadoop最核心的参数！
+		hdfs-default.xml   保存的是hdfs相关的参数！
+		
+		mapred-default.xml: MR程序在运行时，需要使用的参数！
+		yarn-default.xml: yarn在启动时，需要的参数！
+	
+	4个用户可以自定义的配置文件： xxx-site.xml
+		core-site.xml： 用户自定义的设置hadoop最核心的参数！
+		hdfs-site.xml   用户自定义的保存的是hdfs相关的参数！
+		
+		mapred-site.xml: 用户自定义的MR程序在运行时，需要使用的参数！
+		yarn-site.xml: 用户自定义的yarn在启动时，需要的参数！
+	
+	用户自定义的配置文件，可以覆盖默认配置文件中同名的参数的值！
+	
+	Hadoop在启动时，先加载4个默认的配置文件，再加载用户自定义的配置文件，
+	如果用户自定义的配置文件中有和4个默认配置文件重名的参数，可以覆盖之前已经加载的值！
+
+
+七、在使用hadoop命令时
+	可以自定义配置文件的目录：hadoop --config 配置文件的目录
+	如果没有配置，默认读取 HADOOP_HOME/etc/hadoop 中对应的配置文件！
+	
+	hadoop-daemon.sh start namenode脚本在执行时，只会去默认的目录中读取配置文件！
+
+		
+
+
+
+		
+		
+
+

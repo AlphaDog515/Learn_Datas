@@ -1,0 +1,66 @@
+一、分布式HDFS的安装和启动
+	①在$HADOOP_HOME/etc/hadoop/core-site.xml文件
+		<property>
+		  <name>fs.defaultFS</name>
+		  <!-- 告知NN在哪个机器，NN使用哪个端口号接收客户端和DN的RPC请求. -->
+		  <value>hdfs://mypc:9000</value>
+		</property>
+		<property>
+		  <name>hadoop.tmp.dir</name>
+		  <value>/opt/module/hadoop-2.7.2/data/tmp</value>
+		</property>
+		
+
+	②格式化Namenode（只需要格式化一次）
+	命令： hadoop namenode -format
+	目的： ①生成/opt/module/hadoop-2.7.2/data/tmp目录
+		   ②在目录中生成fsimage_0000000000000000000文件
+			
+	③启动Namenode
+	hadoop-daemon.sh start namenode
+
+	启动datanode
+	hadoop-daemon.sh start datanode
+
+	④查看
+		Jps
+		通过浏览器访问  http://nn所在的主机名/ip:50070
+		如果NN和DN都在一台机器，且只有一个DN节点，称为伪分布式！
+
+二、在YARN上运行MR
+	①修改 $HADOOP_HOME/etc/hadoop/mapred-site.xml文件
+		<property>
+		  <name>mapreduce.framework.name</name>
+		  <value>yarn</value>
+		</property>
+
+	②启动YARN
+		配置RM到底在哪个机器启动
+		修改 $HADOOP_HOME/etc/hadoop/yarn-site.xml文件
+
+	<property>
+		<name>yarn.resourcemanager.hostname</name>
+		<value>mypc</value>
+	</property>
+	<!-- reducer获取数据的方式 -->
+	<property>
+			<name>yarn.nodemanager.aux-services</name>
+			<value>mapreduce_shuffle</value>
+	</property>
+
+	③启动RM,NM
+		yarn-daemon.sh start resourcemanager
+		yarn-daemon.sh start nodemanager
+
+	④查看
+		jps
+		http://RM所运行的机器主机名/ip:8088
+	
+	
+三、提交任务
+	hadoop jar  jar包  主类名 参数{多个输入目录，一个输出目录}
+
+	输入目录中必须全部是文件！不要有空的文件夹
+	输出目录必须不存在！
+
+

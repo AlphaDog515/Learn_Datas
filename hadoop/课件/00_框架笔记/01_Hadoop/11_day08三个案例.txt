@@ -1,0 +1,275 @@
+一、分区
+1. 分区是在MapTask中通过Partitioner来计算分区号
+
+2. Partitioner的初始化
+	①计算总的分区数partitions，取决于用户设置的reduceTask的数量
+	②partitions>1，默认尝试获取用户设置Partitioner，如果用户没有定义，那么会使用HashPartitioner
+		HashPartitioner根据key的hashcode进行计算，相同的key以及hash值相同的key会分到一个区
+		
+	②partitions<=1,默认初始化一个Partitioner，这个Partitioner计算的所有的区号都为0
+		
+3. 注意
+	通常在Job的设置中，希望将数据分为几个区，就设置reduceTask的数量为对应的数量！
+	partitions=设置的reduceTask的数量，0<=分区器计算的区号 < partitions
+		
+		
+		
+二、排序
+1. 排序是MR框架在shuffle阶段自动进行
+
+2. 在MapTask端发生两次排序，在排序时，用户唯一可以控制的是提供一个key的比较器
+		
+3. 设置key的比较器
+		①用户可以自定义key的比较器，自定义的比较器必须是一个RawComparator类型的类，
+				重点是实现compareTo()方法
+				
+		②用户通过key，让key实现WritableComparable接口，系统自动提供一个比较器，
+				重点是实现compareTo()方法
+				
+4. 排序的分类
+		全排序：    对所有的数据进行排序，指生成一个结果文件，这个结果文件整体有序
+		部分排序：  最终生成N个结果文件，每个文件内部整体有序
+		二次排序：  在对key进行比较时，比较的条件为多个
+		辅助排序：  在进入reduce阶段时，通过比较key是否相同，将相同的key分为1组
+		
+		
+		
+		
+三、分组
+1. 分组通过分组比较器，对进入reduce的key进行对比，key相同的分为一组，
+		一次性进入Reducer，被调用reduce方法
+
+2. 分组比较器的设置
+		①用户可以自定义key的分组比较器，自定义的比较器必须是一个RawComparator类型的类
+			重点是实现compareTo()方法
+			
+		②如果没有设置key的分组比较器，默认采取在Map阶段排序时，key的比较器
+		
+3. Reduce的细节
+		在进入reduce()，Reducer会自动实例化一个key,value，
+		这个key-value在Redcuer工作期间，一直是一个不变的对象！
+		每次迭代，reducer会把读到的新的key-value的属性值赋值给key-value!
+		
+		
+		
+四、Combiner
+1.  Combiner的本质是一个Reducer，对key-value进行合并
+
+2.  Combiner 和 Reducer的区别
+		Combiner在shuffle阶段运行
+		Reducer在reduce阶段运行
+		
+3.  Combiner适用于  +，-操作，不适合 *，/操作
+
+4.  Combiner的运行时机
+		在MapTask端： 
+			①每次从缓冲区将数据溢写到磁盘之前，如果设置了Combiner，数据会被Combine之后
+				再溢写到磁盘
+			
+			②在MapTask最后的merge阶段，如果溢写的片段数据>=3，如果设置了Combiner，在生成
+				最终的数据时，也会先执行Combine之后再溢写到磁盘
+			
+		在ReduceTask端：  
+			③shuffle线程从多个MapTask读取同一个分区的数据，之后进行合并，
+				在合并时，如果shuffle所使用的内存不够，也会将部分数据临时溢写到磁盘，
+				此时如果设置了Combiner，数据会被Combine之后再溢写到磁盘
+			
+			
+5. Combiner的本质目的是为了减少MR在运行期间的磁盘IO和网络IO
+
+
+
+
+一、SQL中的Join
+
+a xxx join b on a.xx = b.xx 
+
+order 表 ：  orderId,pid,amount
+product表：  pid,pname
+
+①有两个数据集 a,b
+	MR中的数据集： 切片
+②a,b需要中需要有一个共同的字段
+	字段： 切片中的某部分数据
+
+使用MR实现以下功能：
+select o.orderId,p.pname,o.amount
+from order o join  product p
+on o.pid=p.pid
+
+
+二、MR分析
+替换的前提是：相同pid的数据，需要分到同一个区
+	以pid为条件分区，pid相同的分到一个区
+	
+	0号区：  1001 01 1
+			  01 小米
+			  
+	1号区：  1002 02 2
+			 03	格力
+			 
+	注意： 
+		①分区时，以pid为条件进行分区！
+	    ②两种不同的数据，经过同一个Mapper的map()处理，因此需要在map()中
+			判断切片数据的来源，根据来源执行不同的封装策略
+	    
+		③一个Mapper只能处理一种切片的数据，所以在Map阶段无法完成join操作，需要在reduce中实现Join
+	    
+		④在Map阶段，封装数据。 自定义的Bean需要能够封装，两个切片中的所有的数据
+	    
+		⑤在reduce输出时，只需要将来自于order.txt中的数据，将pid替换为pname，
+			而不需要输出所有的key-value在Map阶段对数据打标记，
+			标记哪些key-value属于order.txt，哪些属于pd.txt
+			
+
+	order.txt---->切片(orderId,pid,amount)----JoinMapper.map()------>JoinReducer
+	pd.txt----->切片(pid,pname)----JoinMapper.map()
+
+	
+	
+三、MR实现
+	Mapper: 
+		keyin-valuein:
+		map:
+		keyout=valueout:
+
+
+	Reducer:
+		keyin-valuein:
+		reduce:
+		keyout=valueout:
+	
+	
+四、ReduceJoin
+		ReduceJoin需要在Reduce阶段实现Join功能，一旦数据量过大，效率低！
+		
+		可以使用MapJoin解决ReduceJoin低效的问题！
+		
+		
+		
+五、MapJoin
+		每个MapTask在map()中完成Join!
+		
+		注意：  只需要将要Join的数据order.txt作为切片，让MapTask读取
+				pd.txt不以切片形式读入，而直接在MapTask中使用HDFS下载此文件，
+					下载后，使用输入流手动读取其中的数据！
+					在map()之前通常是将大文件以切片形式读取，小文件手动读取！
+		
+	order.txt---->切片(orderId,pid,amount)----JoinMapper.map()
+	pd.txt----->切片(pid,pname)----JoinMapper.map()
+		
+		
+
+一、案例一
+	输入文件： a.txt atguigu pingping
+			   b.txt atguigu pingping
+				...
+	期望输出： atguigu a.txt---> 1  b.txt---> 2
+
+	如果一个需求，一个MRjob无法完成，可以将需求拆分为若干Job，多个Job按照依赖关系依次执行！
+
+	Job1:
+		Mapper： 默认一个MapTask只处理一个切片的数据，默认的切片策略，一个切片只属于一个文件
+			keyin-valuein: atguigu pingping
+			keyout-valueout: atguigu-a.txt,1
+			
+		Reducer:
+			keyin-valuein: atguigu-a.txt,1
+			keyout-valueout: atguigu-a.txt,3
+						pingping-a.txt,2
+						atguigu-b.txt,3
+						pingping-b.txt,2
+							 
+	Job2：
+		Mapper：默认一个MapTask只处理一个切片的数据，默认的切片策略，一个切片只属于一个文件
+			keyin-valuein: pingping,a.txt-2
+			keyout-valueout: pingping,b.txt-2
+			
+		Reducer:
+			keyin-valuein:  
+						pingping,a.txt-2
+						pingping,b.txt-2
+			keyout-valueout:pingping,a.txt-2  b.txt-2
+	
+
+
+
+
+	
+二、案例二
+	topN案例！ 求前x名的数据！
+	总流量使用前10的用户
+		最多： 降序
+		最少： 升序
+		
+	①根据要求，使用需求字段(总流量)进行排序
+	②取前10
+		a) 只取十个数据
+		b) 只取十个数据,如果取第十条时，第十条存在相等的数据，也将相等的输出
+		b) 取前十名，并列的也要一切输出
+				
+				
+		
+		
+	
+一、案例三
+	A:B,C,D,F,E,O
+	B:A,C,E,K
+	C:F,A,D,I
+	D:A,E,F,L
+	E:B,C,D,M,L
+	F:A,B,C,D,E,O,M
+	G:A,C,D,E,F
+	H:A,C,D,E,O
+	I:A,O
+	J:B,O
+	K:A,C,D
+	L:D,E,F
+	M:E,F,G
+	O:A,H,I,J
+	请注意 A的好友中有B，B的好友中不一定有A
+
+	输出：  A-B：C,E
+			用户-用户： 共同好友...
+			
+	
+	
+	MR :
+	Job1：
+	Mapper:
+		keyin-valuein: （A:B,C,D,F,E,O）
+		map(): 将valuein拆分为若干好友，作为keyout写出
+			   将keyin作为valueout
+		keyout-valueout: （友:用户）
+						（C:A）,(C:B),(C:E)
+
+
+	Reducer:
+		keyin-valuein : （友:用户）
+						（c:A）,(C:B),(C:E)
+		reduce(): 	
+		keyout-valueout  ：（友：用户，用户，用户，用户）
+
+	
+	Job2：
+	Mapper:
+		keyin-valuein:（友：用户，用户，用户，用户）
+		map()： 使用keyin作为valueout
+				将valuein切分后，两两拼接，作为keyout
+		keyout-valueout: (用户-用户，友)
+						 (A-B,C),(A-B,E)
+						 (A-E,C), (A-G,C), (A-F,C), (A-K,C)
+						 (B-E,C),(B-G,C)						  
+						  
+				--------------------
+				(B-E,C)
+				(E-B,G)
+				
+				B-E: C,G
+				
+	Reducer:
+		keyin-valuein : (A-B,C),(A-B,E)
+		reduce(): 	
+		keyout-valueout  ： (A-B:C,E)
+
+

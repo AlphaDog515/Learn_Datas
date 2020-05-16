@@ -1,0 +1,176 @@
+复习
+一、API操作
+1. Scan： Scan对象代表扫描器！可以在Scan对象中添加扫描的参数！
+2. Delete：  删除操作对象，可以在Delete中，添加删除的参数！
+
+二、和MR的集成
+目的：  hbase 只能做简单的查询！对于复杂的查询，例如分组，聚集函数等无法实现，或实现复杂！
+		可以使用MR来完成复杂的计算！
+
+环境配置：		
+在集群上运行MR计算HBase中的数据，需要让Hadoop在启动时，加载可以操作HBase的jar包！
+	在$HADOOP_HOME/etc/hadoop/hadoop-env.sh的44行下添加
+	export HADOOP_CLASSPATH=$HADOOP_CLASSPATH:$HBASE_HOME/lib/*
+		
+计算：
+	①如果在Mapper中读取HBase中的数据，可以继承TableMapper，
+		设置使用TableInputFormat.TableInputFormat可以读取HBase表中的数据，
+		一个region切1片。每次读取HBase region中的一行数据，将rowkey封装为key,
+		将一行数据的Result对象封装为value!
+		
+	②Reducer如果是向HBase中写入数据，可以继承TableReducer
+	
+	③在Driver中，使用TableUtil.initMapper()或使用TableUtil.initReducer()
+		来完成Driver的设置
+			
+注意：
+	在Mapper中，如果输出的类型为put类型，那么默认会启动Combiner，此时，如果不想执行
+	Combiner逻辑，必须让Mapper输出的每个Key都不相等！
+	
+	
+三、和Hive的集成
+1.目的
+	通过hive编写HQL语句分析HBase中的数据
+			
+2.hbase中已经有表存在，需要在hive建表映射，查询即可
+	需要在hive中创建一个非本地外部表！
+		
+3.hbase中没有表，在hive中建表，再插入数据！
+	需要在hive中创建一个非本地管理表！
+		
+4. 本地表和非本地表
+	本地表：数据由hive负责存储，通常是存储在hdfs上！
+			store as  '数据格式'
+	非本地表：数据由其他框架存储，如果使用非本地表，在建表时，需要指定
+			stored by "storageHandler"
+						
+5. SerDe
+	SerDe是序列化器和反序列化器所在库的简写！
+	
+	SerDe的作用是在运行MR程序时，从输入目录中读取数据，反序列化为Mapper输入的key-value对象！
+	或将Reducer写出的key-value对象，使用序列化存储到指定的输出目录中！
+	
+	原则：  输入目录后输出目录中数据的格式不同，需要使用不同的SerDe
+	
+		普通的文本格式：在建表时可以指定ROW Format Delimited xxxx
+						默认使用LazySampleSerDe
+								
+		JSON: 在建表时，可以指定ROW FORMAT "jsonSerDe"
+
+		ORC ：在建表时，可以指定ROW FORMAT "OrcSerDe"包括指定可以读取
+			ORC的输入格式，或输出格式！
+
+			
+
+一、hbase的高可用
+	regionserver由master负责高可用，一个regionserver挂掉，它负责的region会自动分配给其他的regionserver!
+	
+	需要配置的是master的高可用！
+	
+	需要在conf/backup-masters,列出备用的master!
+	
+二、预分区
+1.目的
+	通常情况下，每次建表时，默认只有一个region!随着这个region的数据不断增多，
+	region会自动切分！
+	
+	自动切分：将当前region中的所有的rowkey进行排序，排序后取start-key和stopkey中间的rowkey,
+	由这个rowkey一分为二，一分为二后，生成两个region，新增的Region会交给其他的RS负责，
+	目的是为了达到负载均衡，但是通常往往会适得其反！
+	
+	为例避免某些热点Region同时分配到同一个RegionServer，可以在建表时，自己提前根据数据的特征
+	规划region！
+		
+2.注意：
+	如果使用HexStringSplit算法，随机生成region的边界！
+	在插入一条数据时，rowkey必须先采取HexString，转为16进制，再插入到表中！
+		
+三、Rowkey的设计
+1.使用字符串拼接设计Rowkey
+	原则： 
+	①rowkey作为数据的唯一主键，需要紧密和业务相关，从业务中选择某个代表性的字段作为rowkey
+	②保证rowkey字段选取时的唯一性，不重复性
+	③rowkey足够散列，负载均衡
+	④让有业务关联的rowkey尽量分布到一个region中
+		
+	例如： 转账的场景
+	
+流水号 转入账户 转出账户 时间 金额 用户	
+
+流水号适合作为rowkey,将流水号再拼接字符串，生成完整的rowkey!
+		格式：  流水号+时间戳   时间戳+流水号
+				流水号+随机数	随机数+流水号
+				
+		如果流水号在设计时，足够散列，可以使用流水号在前，拼接随机数！
+		如果流水号不够散列，可以使用函数计算其散列值，或拼接一个散列的值！
+		
+		举例:如何让一个月的数据，分布到同一个Region！可以取月份的时间，作为计算的参数，
+			使用hash运算，将运算后的字符串，拼接到rowkey前部！
+			
+四、内存的分配
+		在conf/hbase-env.sh 中，编写regionserver进程启动时的JVM参数！
+			-Xms : JVM堆的起始值
+			-Xmx : JVM堆的最大值
+			
+		export HBASE_HEAPSIZE=1G 或
+		export HBASE_OPTS="-XX:+UseConcMarkSweepGC"
+		
+五、布隆过滤器
+
+1. 布隆是个人，发明了布隆算法，基于布隆算法实现的组件，称为布隆过滤器！
+		这个组件一般是用作过滤！
+		
+		过滤功能：在海量数据中，用非常高的效率和性能，判断一个数据是否在集合中存在！
+		
+		作用：布隆过滤器只能判断一个数据要么一定在集合中不存在，要么在集合中可能存在！
+		
+		误判：布隆过滤器判断数据可能存在，实际扫描后，发现不存在，这种情况有存在的几率！
+				
+		布隆过滤器是可以提升读的性能！存在误判率！
+		
+2. HBase中如何设置
+		HBase中通过列族设置过滤器。
+		
+		HBase支持两种布隆过滤器：  ROW|ROWCOL
+		
+		ROW: 布隆过滤器在计算时，使用每行的rowkey作为参数，进行判断！
+		
+		举例：   		info				info1
+		
+		info storefile1: (r1,info:age,20) ,(r2,info:age,20) 
+		info1 storefile2: (r3,info1:age,20) ,(r4,info1:age,20) 
+		
+		查询r1时，如果命中，判断storefile2中一定没有r1的数据，在storefile1中可能有！
+
+		ROWCOL: 布隆过滤器在计算时，使用每行的rowkey和column一起作为参数，进行判断！		
+		举例：   		info				info1
+		
+		info storefile1: (r1,info:age,20) ,(r2,info:age,20) 
+		info1 storefile2: (r3,info1:age,20) ,(r4,info1:age,20) 
+		
+		查询rowkey=r1，只查info:age=20 列时，如果命中，判断storefile2中一定没有此数据，
+		在storefile1中可能有！
+		
+		
+		注意： 旧版本，只有get操作，才会用到布隆过滤器，scan用不到！
+				1.x之后，scan也可用用布隆过滤器，稍微起点作用！
+				
+				启用布隆过滤器后，会占用额外的内存，布隆过滤器通常是在blockcache和memstore中！
+				
+		举例： 执行  get 't1','r1'
+		
+			①扫描r1所在region的所有列族的memstore，扫memstore时，先通过布隆过滤器判断r1是否
+			存在，如果不存在，就不扫！可能存在，再扫描！
+			
+			②扫描Storefile时，如果storefile中,r1所在的block已经缓存在blockcache中，直接扫blockcache
+			在扫描blockcache时，先使用布隆过滤器判断r1是否存在，如果不存在，就不扫！可能存在，再扫描！
+		
+						
+
+
+			
+			
+		
+		
+		
+

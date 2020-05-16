@@ -1,0 +1,28 @@
+{
+    "name": "songsong",
+    "friends": ["bingbing" , "lili"] ,       //列表Array, 
+    "children": {                      		//键值Map,
+        "xiao song": 18 ,
+        "xiaoxiao song": 19
+    }
+    "address": {                      //结构Struct,
+        "street": "hui long guan" ,
+        "city": "beijing" 
+    }
+}
+songsong,bingbing_lili,xiao song:18_xiaoxiao song:19,hui long guan_beijing
+yangyang,caicai_susu,xiao yang:18_xiaoxiao yang:19,chao yang_beijing
+
+Map和Struct的区别：  Struct中属性名是不变的！
+					 Map中key可以变化的！
+					 
+注意： 在一个表中，array每个元素之间的分隔符和Map每个Entry之间的分隔符和struct每个属性之间的分隔符需要一致！
+
+建表：
+create table people(name string,friends array<string>,
+children map<string,int>,
+address struct<street:string,city:string>)
+row format delimited fields terminated by ','
+collection items terminated by '_'
+map keys terminated by ':'
+lines terminated by '\n';

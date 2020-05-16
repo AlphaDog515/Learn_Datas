@@ -1,0 +1,42 @@
+
+	安装zookeeper
+	解压zookeeper的tar包到module目录下；
+	修改配置文件，zoo.cfg，添加数据存储目录，修改集群配置，创建myid文件；
+	分发配置文件；
+
+	配置hdfs-ha集群
+	复制etc/hadoop文件夹，修改core-site.xml,hdfs-site.xml;
+	分发配置文件；
+
+	启动hdfs-ha集群
+	启动journalnode，格式化namenode,在另一个namenode上同步元数据信息；
+	启动第二个namenode；
+	启动所有的datanode：hadoop-daemons.sh start datanode；
+	切换一个namenode为active状态；
+
+
+	配置hdfs-ha自动状态转移
+	修改hdfs-site.xml，core-site.xml文件;
+	关闭所有的hdfs服务：stop-dfs.sh
+	启动zookeeper集群，并且初始化其状态：hdfs zkfc -formatZK
+	启动hdfs服务：start-dfs.sh
+	在各namenode启动zkfc: hadoop-daemon.sh start zkfc
+
+	yarn-ha的配置
+	修改yarn-site.xml配置文件；
+	先停止之前开启的hdfs服务；
+	依次启动journalnode,namenode,datanode,然后选择一个namenode作为active；
+	启动yarn：start-yarn.sh;
+
+	/opt/module/zookeeper-3.4.10/bin/zkCli.sh -server hadoop104:2181 ls /
+
+	启动高可用集群
+	群起zookeeper：xcall /opt/module/zookeeper-3.4.10/bin/zkServer.sh start
+	初始化HA在Zookeeper中状态：hdfs zkfc -formatZK；
+	群起journalnode: hadoop-daemons.sh start journalnode;
+	群起namenode,datanode: start-dfs.sh;
+	分别启动yarn：start-yarn.sh 【启动多个NM和一个RM】；
+	启动另一个RM：yarn-daemon.sh start resourcemanager；
+	// 获取yarn状态：yarn rmadmin -getServiceState rm1
+	// 获取hdfs状态：hdfs haadmin -getServiceState nn1
+

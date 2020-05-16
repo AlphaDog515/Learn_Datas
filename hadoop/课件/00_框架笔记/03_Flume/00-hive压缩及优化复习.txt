@@ -1,0 +1,27 @@
+一、复习
+
+1.存储和压缩
+	存储：   hive支持：	TEXTFILE,SequenceFile,ORC,Parquet
+			 行式存储：	TEXTFILE,SequenceFile
+			 列式存储： ORC,Parquet 都是行列结合存储！
+						将一部分行(stripe或行组)按照列式存储！
+							
+			 ORC：  hive独有。性能略好！
+			 Parquet:  希望整个hadoop生态圈都可以支持Parquet格式！实用性更广！
+			 使用ORC+snappy组合！
+			 使用Parquet+LZO组合！
+	
+	压缩：   hive基于hadoop，hive支持的压缩格式也是hadoop支持的压缩格式
+	
+2.自定义函数
+		①自定义类，继承UDF
+		②提供多个evaluate()，此方法不能返回void，但是可以返回null值
+		③打包，上传到HIVE_HOME/auxlib下
+		④在hive中使用 create [temporary] function 函数名  as  全类名
+		⑤注意函数在哪个库创建，只能在哪个库下使用，如果要跨库使用，需要加上库名作为前缀！
+
+
+
+	
+	
+	

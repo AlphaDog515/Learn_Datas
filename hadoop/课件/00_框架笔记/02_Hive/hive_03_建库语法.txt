@@ -1,0 +1,31 @@
+一、库的常见操作
+
+1.增
+  CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
+  [COMMENT database_comment]  // 库的注释说明
+  [LOCATION hdfs_path]        // 库在hdfs上的路径
+  [WITH DBPROPERTIES (property_name=property_value, ...)]; // 库的属性
+
+  
+  create database  if not exists mydb2   // schema是之前的版本
+  comment 'this is my db' 
+  location 'hdfs://hadoop101:9000/mydb2' 
+  with dbproperties('ownner'='jack','tel'='12345','department'='IT');
+  
+2.删
+		drop database 库名： 只能删除空库
+		drop database 库名 cascade： 删除非空库
+
+
+
+3.改
+		use 库名： 切换库
+		
+		dbproperties: alter database mydb2 set dbproperties('ownner'='tom','empid'='10001');
+				同名的属性值会覆盖，之前没有的属性会新增
+
+4.查
+		show databases: 查看当前所有的库
+		show tables in database: 查看库中所有的表  // show tables in default
+		desc database 库名： 查看库的描述信息
+		desc database extended 库名： 查看库的详细描述信息

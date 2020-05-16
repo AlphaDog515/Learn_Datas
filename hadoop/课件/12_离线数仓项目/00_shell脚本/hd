@@ -1,0 +1,17 @@
+#!/bin/bash
+#hadoop集群的一键启动脚本
+if(($#!=1))
+then
+	echo '请输入start|stop参数!'
+	exit;
+fi
+
+#只允许传入start和stop参数
+if [ $1 = start ] || [ $1 = stop ]
+then
+	$1-dfs.sh
+	$1-yarn.sh
+	ssh hadoop102 mr-jobhistory-daemon.sh $1 historyserver
+else
+	echo '请输入start|stop参数!'
+fi

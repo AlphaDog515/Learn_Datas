@@ -1,0 +1,317 @@
+一、Sqoop的简介
+	SQL To Hadop，目的是完成关系型数据库导入导出到Hadoop!
+		
+	Sqoop的原理是将命令翻译为MR执行，MR没有Reduce阶段，只有Map阶段！
+		
+二、 Sqoop的安装
+
+1.配置环境
+	可以在/etc/profile中配置，导出为全局变量
+	或sqoop-env.sh
+		
+	配置 HADOOP_HOME,HIVE_HOME,HBASE_HOME,ZOOKEEPER_HOME
+		
+2.将连接mysql的驱动，拷贝到sqoop的lib目录【hive的lib中有】
+
+3.测试
+	bin/sqoop list-databases 
+	--connect jdbc:mysql://hadoop102:3306/ 
+	--username root --password 123456
+
+
+三、import
+1. import 从 RDMS 将数据迁移到 HDFS
+
+2. 导入到HDFS
+// \代表在shell窗口中换行
+	bin/sqoop import \
+// 连接的url
+	--connect jdbc:mysql://hadoop102:3306/mydb \
+// 用户名
+	--username root \
+// 密码
+	--password 123456 \
+// 要导哪个表的数据
+	--table staff \
+// 将数据导入到hdfs的哪个路径
+	--target-dir /company \
+// 如果目标目录存在就删除
+	--delete-target-dir \
+// 导入到hdfs上时，mysql中的字段使用\t作为分隔符
+	--fields-terminated-by "\t" \
+// 设置几个MapTask来运行
+	--num-mappers 2 \
+// 基于ID列，将数据切分为2片，只有在--num-mappers>1时才需要指定,选的列最好不要有null值，否则null
+// 是无法被导入的！尽量选取主键列，数字列
+	--split-by id
+// 只导入id和name 列
+	--columns id,name \
+// 只导入复合过滤条件的行
+	--where 'id >= 10 and id <= 20' \
+// 执行查询的SQL，将查询的数据进行导入，如果使用了--query,不能再用--table,--where,--columns
+// 只要使用--query ，必须添加$CONDITONS,这个条件会被Sqoop自动替换为一些表达式
+	--query "SQL"
+
+-----------------------
+bin/sqoop import \
+--connect jdbc:mysql://hadoop102:3306/mydb \
+--username root \
+--password 123456 \
+--table t_emp \
+--target-dir /t_emp \
+--delete-target-dir \
+--fields-terminated-by "\t" \
+--num-mappers 2 \
+--split-by id \
+--columns age,name \
+--where 'id >= 5 and id <= 10'
+
+---------------------------
+bin/sqoop import \
+--connect jdbc:mysql://hadoop102:3306/mydb \
+--username root \
+--password 123456 \
+--query "select * from t_emp where \$CONDITIONS and id >=2" \
+--target-dir /t_emp \
+--delete-target-dir \
+--fields-terminated-by "\t" \
+--num-mappers 2 \
+--split-by id
+
+3.导入到Hive
+	Sqoop导入到hive，先将数据导入到HDFS，再将HDFS的数据，load到hive表中！
+		
+$ bin/sqoop import \
+--connect jdbc:mysql://hadoop102:3306/company \
+--username root \
+--password 123456 \
+--table staff \
+--num-mappers 1 \
+//导入到hive
+--hive-import \
+//导入到hive表中字段的分隔符
+--fields-terminated-by "\t" \
+// 是否以insert overwrite方式覆盖导入数据
+--hive-overwrite \
+// 要导入的hive表的名称，会自动帮助我们建表。建议还是在hive中手动建表，需要注意和mysql表的数据类型匹配
+--hive-table staff_hive
+
+-----------------------------
+bin/sqoop import \
+--connect jdbc:mysql://hadoop102:3306/mydb \
+--username root \
+--password 123456 \
+--table t_emp \
+--num-mappers 1 \
+--hive-import \
+--fields-terminated-by "\t" \
+--hive-overwrite \
+--hive-table t_emp
+
+4.导入到hbase
+	目前使用的sqoop1.4.6对应的是低版本的hbase,目前的1.3.0的hbase版本有点高！
+	在执行导入时，sqoop是可以帮我们自动建表，在使用1.3.0hbase时，建表会失败！
+	建议手动建表！
+	
+bin/sqoop import \
+--connect jdbc:mysql://hadoop102:3306/mydb \
+--username root \
+--password 123456 \
+--table t_emp \
+//如果表不存在，hbase自动建表
+--hbase-create-table \
+// 导入的表名
+--hbase-table "t_emp" \
+// mysql的哪一列作为rowkey
+--hbase-row-key "id" \
+//导入的列族名
+--column-family "info" \
+--num-mappers 1 \
+--split-by id	
+		
+---------------------------		
+bin/sqoop import \
+--connect jdbc:mysql://hadoop102:3306/mydb \
+--username root \
+--password 123456 \
+--table t_emp \
+--hbase-create-table \
+--hbase-table "t_emp" \
+--hbase-row-key "id" \
+--column-family "info" \
+--num-mappers 1 
+
+
+复习：	
+一、HBase的master高可用
+
+	在conf/backup-masters中配置要启动的所有的master!
+	
+二、预分区
+
+	预分区的作用，提前熟悉数据集，对数据集进行预划分region!
+	保证数据在读写时，可以使多个region负载均衡！
+	
+①手动指定预分区的边界
+create 'staff1','info','partition1',SPLITS => ['1000','2000','3000','4000']
+
+②手动指定预分区使用的算法和要分区的个数
+create 'staff2','info','partition2',{NUMREGIONS => 15, SPLITALGO => 'HexStringSplit'}
+
+注意事项： rowkey在执行读写时，需要转为十六进制后，再进行读写！
+
+③如果边界过多，可以编写在文件中
+create 'staff3','partition3',SPLITS_FILE => 'splits.txt'
+
+④API操作
+hAdmin.createTable(tableDesc, splitKeys);
+		splitKeys是一个二维数组，记录边界
+		
+三、rowkey的设计
+
+总体来说：
+	rowkey必须足够离散，才能保证region间的负载均衡
+	rowkey和业务相关
+	相同特征的rowkey尽量分布到一个region!
+	rowkey必须唯一
+		
+	做法：
+	①使用hash函数，或随机数来使rowkey离散
+	②字符串反转
+	③字符串拼接
+
+四、布隆过滤器
+	布隆过滤器是使用布隆算法编写的过滤器！
+	这个过滤器可以快速高效地在大数据中，判断一个元素是否一定不在集合中，或是否
+	可能在集合中，有一定的误判率！
+	
+	在hbase中，布隆过滤器可以通过列族的属性设置，可以设置为 ROW|ROWCOL
+	
+	布隆过滤器是在查询时，使用！
+		
+五、内存优化
+
+	编辑conf/hbase-env.sh，在此文件中，配置HBASE_HEAPSIZE或HBASE_OPTS参数，定义
+	堆的初始值和最大值等参数！
+	
+六、Phoneix
+
+		Phoneix在多种数据库之上构建一个同一的SQL层！支持JDBC的方式访问这些数据库！
+		Phoneix使用客户端发送SQL，SQL在服务端的执行引擎中被解析为Java程序，通过Phoneix
+		定义的协处理器和过滤器实现一些复杂的查询和过滤等操作！
+		
+安装：
+		①解压安装
+		②让HBase持有Phoneix访问HBase的jar包
+		
+Phoneix和hbase的映射
+		hbase      		Phoneix
+		namespace		database
+		tableDesc		table
+		rowkey			主键
+		columnFamily
+		ColumnQulifier  cf:cq=列
+		
+使用：
+①hbase中没有目标表，在phoneix中建表，使用SQL向hbase表中插入数据
+	注意：  建表时，phoneix表中的主键，默认作为hbase中的rowkey
+			如果不指定列族，默认在hbase中添加0号列族
+			希望查询方便，必须指定在建表时，不会表中的数据进行编码column_encoded_bytes=0
+			
+②hbase中已经存在表，在phoneix中建表，进行映射，使用SQL进行操作
+	注意：  如果希望对表进行只读操作，可以创建视图
+			表名和列名及rowkey需要映射，数据类型必须保证可以合适地转换！
+			
+在phoneix中使用upsert对数据进行更新操作！
+
+创建二级索引
+①环境的配置，在hbase-site.xml中添加支持二级索引的参数
+②创建二级索引
+	create [local] index 索引名 on 表名("列族"."列名")
+③本地索引和全局索引
+	默认创建的索引是全局索引。全局索引是在hbase中创建一个索引表。
+	因此数据和索引有可能是分配到不同的RS。
+	全局索引适合多读少写的场景！在执行写操作时，不仅要更新数据，还需要更新索引！
+	在更新索引时，跨regionserver会带来额外的网络开销！
+	
+	如果在创建索引时添加了local关键字，此时创建的是本地索引，
+	本地索引是在表中创建一个列族，存放索引数据，此时适合多写场景。
+	数据和索引在一台RS上，无需跨RS！
+		
+七、Sqoop
+	Sqoop是一个ETL工具，用来完成RDMS和HDFS数据的导入和导出！
+	
+	导入：从RDMS将数据导入到HDFS
+	导出：从HDFS将数据导入到RDMS
+	
+	本质：将Sqoop命令，转为MR程序，这个程序执行ETL操作！
+		MR程序只有Map阶段，没有Reduce			
+	
+	注意：  
+	导入：	①--query "SQL" 和 --table|--columns|--where是互斥的
+			②如果使用了--query，此时SQL语句必须添加一个$CONDITIONS的令牌
+			③在向hbase导入数据时，通常需要自己建表，目前1.4.6的Sqoop无法调用高版本HBase的建表API！
+					
+	
+
+
+
+一、Sqoop导出
+ bin/sqoop export \
+--connect jdbc:mysql://hadoop102:3306/company \
+--username root \
+--password 123456 \
+//要导出的mysql的表名
+--table staff2 \
+--num-mappers 1 \
+//导出的数据在hdfs上的路径
+--export-dir /company \
+// 导出时，基于哪一列判断数据重复
+--update-key 
+// 导出的数据的分隔符
+--input-fields-terminated-by "\t"
+
+--------------------------------
+bin/sqoop export \
+--connect 'jdbc:mysql://hadoop102:3306/mydb?useUnicode=true&characterEncoding=utf-8' \
+--username root \
+--password 123456 \
+--table t_emp2 \
+--num-mappers 1 \
+--export-dir /t_emp \
+--update-key id \
+--update-mode  allowinsert \
+--input-fields-terminated-by "\t"
+
+在mysql中，执行插入时，如果对于某些唯一列，出现了重复的数据，那么会报错duplicate Key！
+此时，对于重复的列，如果希望指定更新其他列的操作，那么可以使用以下写法：
+insert into t_emp2 value(6,'jack',30,3,100001) on duplicate key update
+name=values(name),age=values(age),deptid=values(deptid),empno=values(empno);
+
+在执行export导出时，默认的导出语句适用于向一个新的空表导数据的场景！每一行要导出的记录，都会
+转换为Insert语句执行查询，此时如果说触犯了表的某些约束，例如主键唯一约束，此时Insert失败，
+Job失败！
+
+如果要导入的表已经有数据了，此时可以指定--update-key参数，通过此参数，可以将导入的数据，使用
+updata语句进行导入，此时，只会更新重复的数据，不重复的数据是无法导入的！
+
+如果希望遇到重复的数据，就更新，不重复的数据就新增导入，可以使用--update-key，结合
+--update-mode(默认为updateonly)=allowinsert。
+
+mysql5.6开启binlog功能：
+	在/etc/my.cnf中配置
+	[mysqld]
+	log-bin=mysql-bin
+	重启服务！日志默认混合！
+	binlog_format=mixed
+	
+	
+sql的命令编写在脚本中，参数名和参数值之间，需要换行！
+
+
+		
+		
+
+
+
+

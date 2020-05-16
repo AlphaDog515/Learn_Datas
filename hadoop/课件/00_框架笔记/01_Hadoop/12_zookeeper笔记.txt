@@ -1,0 +1,66 @@
+复习
+一、自定义输出格式
+	1. 自定义类继承FileOutPutFormat,提供一个RecordWriter
+			在RecordWriter的write()中将记录写出
+			
+	2. ETL
+			E(extract)T(transfer)L(load): 狭义的ETL只代表使用某种规则对数据进行过滤！
+				广义的ETL，指数据从采集----传输----过滤----存储----应用程序等整个数据流！
+					
+	3. 计数器
+			计数器可以在MR运行期间进行计数，通过计数器对程序进行调试！
+			
+			Context.getCounter("组名","计数器名").increment(long x);
+			
+	4. Join
+		①ReduceJoin: 在reduce端对数据进行Join,保证相同关联字段的数据，可以分到一个分区！
+			a) 在Map端，封装数据，封装数据时，使用一个通用的Bean来封装所有的数据
+			b) 在Map端，封装数据时，为数据的来源进行标记
+			c) 保证关联字段相同的数据可以分配到一个分区(自定义分区器)
+			d) 在Reducer的reduce()方法中，对数据进行分类
+					必须将每次迭代的Bean的属性，拷贝到一个new Bean()，将新的Bean保存到集合！
+			c) 在Reducer的cleanup()中，对分类后的数据，对需要Join的数据执行Join操作，写出
+			
+		缺点： 数据量大时，分区是有限的，效率低！
+		
+		
+		②MapJoin: 在Map端对数据进行Join，可以没有Reduce阶段
+			核心：将大的数据，放在MR的输入目录，以切片形式读取！
+				  在Mapper的map()之前，提前手动读取小文件中的内容，
+						在map()中对需要Join的数据，执行Join，写出！
+					
+			手动读取小文件，为了避免每个MapTask都从HDFS下载数据，可以使用分布式缓存！
+				缓存：  Job.addCachedFile(Uri uri);
+				读取：  Context.getCachedFiles();
+				
+			分布式缓存的优势：  ①在Task运行之前，就提前将文件发送到Task所在的机器，节省下载的时间
+								②每个Job只会下载一次，节省了频繁请求NN
+								
+								③可以缓存归档文件，归档文件，可以是tar或zip，
+									这些文件可以在Task运行的阶段自动解归档
+								
+
+	5. 如果一个MR任务在单个Job中的实现逻辑复杂，可以把复杂逻辑拆分到多个Job中，
+			多个Job通过依赖关系依次运行
+		①JobControl: 可以设置一组运行的Job及其依赖关系
+			创建一个线程，运行JobControl
+
+		②ControledJob:  可以指定依赖关系的Job
+			public  ControledJob (Configuration conf): 基于一个配置创建一个ControledJob
+			public void addDependingJob(ControledJob job): 指定Job间的依赖关系
+			
+			
+	6. TopN相关
+			①需要根据让排序的字段，作为Mapper输出的key
+			②升序还是降序，如何排序，可以通过自定义的比较器来实现
+			③TopN的输出在reduce端进行控制
+		
+		
+
+
+一、ZK的日志配置
+1.客户端
+		bin/zkEnv.sh 60行  ZOO_LOG4J_PROP="ERROR,CONSOLE"
+		
+2.服务端
+		bin/zkEnv.sh 脚本前定义 ZOO_LOG_DIR=/opt/module/zookeeper-3.4.10/logs		

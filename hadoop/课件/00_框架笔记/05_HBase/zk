@@ -1,0 +1,16 @@
+#!/bin/bash
+#启动(start)|停止(stop)|查看zk集群状态(status)
+#检测用户是否传入了参数
+if(($#==0))
+then
+	echo '请输入start|stop|status'
+	exit;
+fi
+
+#对参数检查，看参数是否复合要求
+if [ $1 = start ] || [ $1 = stop ] || [ $1 = status ]
+then
+	xcall /opt/module/zookeeper-3.4.10/bin/zkServer.sh $1
+else
+	echo '只允许输入start|stop|status!'
+fi

@@ -1,0 +1,767 @@
+一、系统函数
+linux日期：
+	date +%F // 2020-04-08
+	date +%F -d "-2 day"  // 2020-04-06
+	date +%F -d "2 day"   // 2020-04-10
+	date --help
+	
+
+hive日期函数：
+	// 没有日期的数据没有价值
+	show functions; // 展示所有的函数
+	desc function extended year; // 查看函数详细使用信息
+	
+	hive默认解析的日期格式是：2019-11-24 08:09:10
+	format ：'yyyy-MM-dd HH:mm:ss' or 'yyyy-MM-dd'	
+	// select date_format('2020-02-14','yyyy-MM'); 2020-02
+	// select date_format('2020/02/13','yyyy/MM'); // 这样不能解析
+	
+	
+	unix_timestamp: 返回当前或指定时间的时间戳	1970.01.01.00.00.00
+		// select unix_timestamp('2019-12-30 0:0:0')
+		// select unix_timestamp('2019_12_31 1-1-1','yyyy_MM_dd HH-mm-ss');
+		
+	from_unixtime：将时间戳转为日期格式
+		// select from_unixtime(1577635200);
+		// select from_unixtime(1544308943,'yyyy-MM-dd HH:mm:ss');  // 2018-12-09 06:42:23
+		// select from_unixtime(unix_timestamp('20171205','yyyymmdd'),'yyyy-mm-dd');
+
+
+
+	current_date：当前日期
+		// select current_date();  // 返回当前年月日2020-01-08
+		
+	current_timestamp：当前的日期加时间
+		// select current_timestamp(); 2020-01-08 18:36:07.841
+
+	
+	
+	* to_date：抽取日期部分
+		// select to_date('2019-7-30 04:17:52');  2019-07-30
+
+	
+	year：获取年 // select year("2019-9-20"); 2019
+	month：获取月
+	day：获取日
+	hour：获取时
+	minute：获取分
+	second：获取秒
+
+
+	weekofyear：当前时间是一年中的第几周
+		// select weekofyear('2019-12-31'); 1
+		// 2019-12-31是周二 是第一周  第一周一直到2020.1.5（周日） 2020.1.6是第二周
+
+	dayofmonth：当前时间是一个月中的第几天
+		// select dayofmonth('2020-2-29'); 29
+		// select dayofmonth('2019-2-29'); 1
+		
+	
+	
+	* months_between： 两个日期间的月份，前-后
+		// select months_between('1997-02-28 10:30:00','1996-10-20'); 返回double
+
+	* add_months：日期加减月
+		// select add_months('2019-1-30',1); 2019-02-28 1-31返回的也是这个结果
+		
+	* datediff：两个日期相差的天数，前-后
+		// select datediff('2009-8-30','2009-7-23'); 38
+		
+	* date_add：日期加天数 // select date_add('2019-9-20',2)；
+	* date_sub：日期减天数
+	* last_day：日期的当月的最后一天 // select last_day('2019-9-20');
+	
+	* next_day('2020-02-14','mon')  // 下一个周一
+		// mon,tue,wed,thu,fri,sat,sun 距离当前最近的，不一定是下周的周几
+
+	
+	
+	
+	
+	*常用取整函数
+	round： 四舍五入 
+		select round(5.5)  6.0
+		select round(5.6)	6.0
+		select round(5.4)	5.0
+		select round(-5.5)	-6.0
+		select round(-0.5)	-1.0
+		select round(-1.45)	-1.0
+	
+	ceil： 向上取整	
+		select ceil(5.4)	6
+		select ceil(-5.5)	-5
+		select ceil(-0.5)	0
+		select ceil(-1.45) -1
+	
+	floor： 向下取整
+		select floor(5.6)	5
+		select floor(5.4)	5
+		select floor(-5.5)	-6
+		select floor(-0.5)	-1
+		select floor(-1.45)	-2
+
+	
+	
+	常用字符串操作函数
+	upper：  转大写 select upper('zhangsan');
+	lower：  转小写
+	length： 长度
+	* trim：  前后去空格
+	lpad： 向左补齐，到指定长度
+		select lpad('he',1,'a'); h
+		select lpad('he',2,'a'); he
+		select lpad('he',3,'a'); ahe
+
+	rpad：  向右补齐，到指定长度
+		 select rpad('he',1,'a'); h
+		 select rpad('he',2,'a'); he 
+		 select rpad('he',3,'a'); hea
+
+
+	* regexp_replace： 
+		SELECT regexp_replace('100-200', '(\d+)', 'num')	// 'num-num'
+		使用正则表达式匹配目标字符串，匹配成功后替换！
+		// select regexp_replace('hello world','ll','aa');  heaao world
+
+		
+	集合操作
+	size:	集合（map和list,不能是struct）中元素的个数  
+	// select size(friends) from test;
+	
+	
+	
+	* array_contains: 判断array中是否包含某个元素 
+	// select array_contains(array(1,34,90),1); true
+	
+	sort_array： 将array中的元素排序 
+	// select sort_array(array('d','a','c','g')); ["a","c","d","g"]
+
+
+	map_keys： 	返回map中的key
+	map_values: 返回map中的value
+	// select map_keys(children) from test;
+	["xiao song","xiaoxiao song"]
+	["xiao yang","xiaoxiao yang"]
+
+	select map_values(children) from test;
+	[18,19]
+	[18,19]
+
+	test.name	 test.friends	     test.children	                        test.address
+	songsong	["bingbing","lili"]	{"xiao song":18,"xiaoxiao song":19}	{"street":"hui long guan","city":"beijing"}
+	yangyang	["caicai","susu"]	{"xiao yang":18,"xiaoxiao yang":19}	{"street":"chao yang","city":"beijing"}
+
+
+
+
+
+
+
+二、常用函数
+	1.nvl
+		nvl( string1, replace_with)：
+			判断string1是否为null，如果为null，使用replace_with替换null，否则不做操作！
+						
+			在以下场景使用：①将null替换为默认值
+							②运行avg()等，avg统计时会跳过null
+							 
+	2.concat:  字符串拼接。 可以在参数中传入多个string类型的字符串，一旦有一个参数为null，返回Null！
+
+	3.concat_ws: 使用指定的分隔符完成字符串拼接！concat_ws(分隔符,[string | array<string>]+)
+			
+	4.collect_set:  collect_set(列名) ： 将此列的多行记录合并为一个set集合，去重
+
+	5.collect_list: collect_list(列名) ： 将此列的多行记录合并为一个set集合，不去重
+
+	6.explode: explode(列名) 
+			参数只能是array或map!
+			将array类型参数转为1列N行
+			将map类型参数转为2列N行
+		
+		
+		
+		
+练习一
+
+ emp_sex.name  | emp_sex.dept_id  | emp_sex.sex 
+ +---------------+------------------+--------------+--+
+| emp_sex.name  | emp_sex.dept_id  | emp_sex.sex  |
++---------------+------------------+--------------+--+
+| 悟空            | A                | 男            |
+| 大海            | A                | 男            |
+| 宋宋            | B                | 男            |
+| 凤姐            | A                | 女            |
+| 婷姐            | B                | 女            |
+| 婷婷            | B                | 女            |
++---------------+------------------+--------------+--+ 
+ 
+ 求每个部门男女各有多少人
+ 思路一： 先按照性别过滤，求这个性别有多少人。再将同一个部门男女性别各多少人Join后拼接成一行结果！
+	 select t1.dept_id,male_count,female_count
+	 from
+		(select dept_id,count(*) male_count from emp_sex where sex='男' group by dept_id) t1
+	 join
+		(select dept_id,count(*) female_count from emp_sex where sex='女' group by dept_id) t2
+	 on t1.dept_id=t2.dept_id
+ 
+ 尽量避免子查询！
+ 思路一：在求男性个数时，求男性总数！求总数，可以使用sum(数字),需要将每个人的性别由男|女 转为数字！
+		在求男性总人数，如果当前人的性别为男，记1，
+		在求女性总人数，如果当前人的性别为女，记1，
+ 
+ 判断函数：case ... when:  
+	case  列名 
+		when  值1  then  值2
+		when  值3  then  值4
+		...
+		else 值5
+	end
+	
+	Case When Else End用法详解
+
+	1)更新
+	update table  
+	set 字段1 = case     
+		when 条件1 then 值1       
+		when 条件2 then 值2      
+		else 值3      
+		end     
+	where......
+
+	2)查询
+	select 字段1, 字段2,       
+		case 字段3     
+		when 值1 then 新值       
+		when 值2 then 新值      
+		end as 重新命名字段3的名字       
+	from table      
+	where......    
+	order by......
+
+	在一般的SELECT中，其语法举例如下：
+	CASE WHEN price IS NULL THEN FALSE ELSE TRUE END AS isPromotion
+
+		
+				
+	 select dept_id,
+		sum(case sex when '男' then 1 else 0 end) male_count,
+		sum(case sex when '女' then 1 else 0 end) female_count
+	 from emp_sex group by dept_id 			
+		
+
+	 if(判断表达式,值1(表达式为true),值2(表达式为false))
+	 
+	 select dept_id,
+		sum(if(sex='男',1,0)) male_count,
+		sum(if(sex='女',1,0)) female_count
+	 from emp_sex group by dept_id 
+ 
+ 
+ 
+练习二 
+	1列N行转为1列1行
+ 
+	select后面只能写分组后的字段和聚集函数！
+		聚集函数： 多进一出 
+ 
+	person_info.name  | person_info.constellation  | person_info.blood_type  
+ 
+	把星座和血型一样的人归类到一起。结果如下：
+		射手座,A            大海|凤姐
+
+	select concat(constellation,',',blood_type),concat_ws('|',collect_list(name))
+	from person_info
+	group by constellation,blood_type
+
+
+
+
+练习三
+
+	列转行： 1列1行  转为  1列N行
+		explode函数属于UDTF，UDTF在使用时，不能和其他表达式一起出现在select子句后！
+			   只能单独出现在select子句后！
+
+	 movie_info.movie   |     movie_info.category 
+	《疑犯追踪》        | ["悬疑","动作","科幻","剧情"]
+
+	 期望结果：
+		《疑犯追踪》      悬疑
+		《疑犯追踪》      动作
+		《疑犯追踪》      科幻
+		《疑犯追踪》      剧情
+		《Lie to me》     悬疑
+
+	-------------不允许----------------------------------
+		select movie,explode(category) from  movie_info
+
+	--------不符合要求--------------------------------
+	select movie,col1
+	from movie_info
+	join 
+	(select explode(category)  col1
+	from  movie_info) tmp
+
+	处理：
+	①先explode
+	②需要将炸裂后的1列N行，在逻辑上依然视作1列1行，实际是1列N行，和movie进行笛卡尔集
+		这个操作在hive中称为侧写(lateral view)  
+			
+		Lateral view explode('列')  临时表名   as  临时列名
+			
+	select movie,col1 from movie_info Lateral view  explode(category) tmp1 as col1
+	
+	
+	
+
+练习四
+	数据：
+		names				tags						hobbys
+	jack|tom|jerry	阳光男孩|肌肉男孩|直男		晒太阳|健身|说多喝热水
+	marry|nancy	 	阳光女孩|肌肉女孩|腐女		晒太阳|健身|看有内涵的段子
+
+	create table person_info2(names array<string>,tags array<string>,hobbys array<string>)
+	row format delimited fields terminated by '\t'
+	collection items terminated by '|'
+
+	期望结果：
+	jack	阳光男孩	晒太阳
+	jack	阳光男孩	健身
+	jack	阳光男孩	说多喝热水
+	jack	肌肉男孩	晒太阳
+	jack	肌肉男孩	健身
+	jack	肌肉男孩	说多喝热水
+	.....
+
+	select name,tag,hobby
+	from person_info2
+	lateral view explode(names) tmp1 as name	每一行做笛卡尔积
+	lateral view explode(tags) tmp1 as tag
+	lateral view explode(hobbys) tmp1 as hobby
+
+
+	// 侧写三列结果也OK
+	select name,tag,hobby
+	from person_info2
+	lateral view explode(names) tmp1 as name
+	lateral view explode(tags) tmp2 as tag
+	lateral view explode(hobbys) tmp3 as hobby
+
+
+	// 侧写两列
+	select name,tag,hobbys
+	from person_info2
+	lateral view explode(names) tmp1 as name
+	lateral view explode(tags) tmp2 as tag
+
+	// 侧写一列
+	select name,tags,hobbys
+	from person_info2
+	lateral view explode(names) tmp1 as name
+
+ 
+
+
+
+
+
+
+
+
+
+
+三、窗口函数
+	官方文档地址：
+		https://cwiki.apache.org/confluence/display/Hive/LanguageManual+WindowingAndAnalytics
+	oracle,sqlserver都提供了窗口函数，但是在mysql5.5和5.6都没有提供窗口函数！
+			
+	窗口函数： 窗口+函数
+		窗口： 函数运行时计算的数据集的范围
+		函数： 运行的函数！
+			仅仅支持以下函数：
+			1.windowing functions：lead,lag,first_value,last_value
+				
+				lead (scalar_expression [,offset] [,default])：返回当前行以下N行的指定列的列值！
+					如果找不到，就采用默认值
+				
+				
+				lag (scalar_expression [,offset] [,default])：返回当前行以上N行的指定列的列值！
+					如果找不到，就采用默认值
+					
+				
+				first_value(列名,[false(默认)])：返回当前窗口指定列的第一个值，
+					第二个参数如果为true,代表加入第一个值为null，跳过空值，继续寻找！
+					
+				
+				last_value(列名,[false(默认)])：返回当前窗口指定列的最后一个值，
+					第二个参数如果为true,代表加入第一个值为null，跳过空值，继续寻找！
+				
+			2.统计类的函数(一般都需要结合over使用)： min,max,avg,sum,count
+				
+			3.排名分析：rank,row_number,dense_rank,cume_dist,percent_rank,ntile
+				rank			
+				row_number
+				dense_rank
+			//	cume_dist       	// 小于等于当前值的行数/分组内总行数
+			//	percent_rank		// 分组内当前行的RANK值-1/分组内总行数-1
+				ntile
+		
+		注意：不是所有的函数在运行都是可以通过改变窗口的大小，来控制计算的数据集的范围！
+			  所有的排名函数和lag,lead，支持使用over()，但是在over()中不能定义 window_clause!
+		
+		
+		格式：函数 over(partition by 字段  order by 字段  window_clause)
+		
+		
+		窗口的大小可以通过windows_clause来指定：
+		(rows | range) between (unbounded | [num]) preceding and ([num] preceding | current row | (unbounded | [num]) following)
+		(rows | range) between current row and (current row | (unbounded | [num]) following)
+		(rows | range) between [num] following and (unbounded | [num]) following
+			
+		特殊情况:①在over()中既没有出现windows_clause，也没有出现order by，
+					窗口默认为rows between unbounded preceding and unbounded  following
+				 
+				 ②在over()中没有出现windows_clause，指定了order by，
+					窗口默认为 rows between unbounded preceding and current row
+			
+		窗口函数和分组有什么区别？
+			 ①如果是分组操作，select后只能写分组后的字段;
+			 ②如果是窗口函数，窗口函数是在指定的窗口内，对每条记录都执行一次函数;
+			 ③如果是分组操作，有去重效果，而partition不去重！		
+	    
+
+		rows between unbounded preceding and unbounded following
+		rows between unbounded preceding and current row
+		rows between current row and unbounded following
+		rows between 5 preceding and 3 following
+		
+		
+		
+ business.name  | business.orderdate  | business.cost 
+ 
+ (9)查询前20%时间的订单信息
+	精确算法：
+	select * from
+		(select name,orderdate,cost,cume_dist() over(order by orderdate ) cdnum from  business) tmp
+	where cdnum<=0.2
+	+-----------+----------------+-----------+----------------------+--+
+	| tmp.name  | tmp.orderdate  | tmp.cost  |      tmp.cdnum       |
+	+-----------+----------------+-----------+----------------------+--+
+	| jack      | 2017-01-01     | 10        | 0.07142857142857142  |
+	| tony      | 2017-01-02     | 15        | 0.14285714285714285  |
+	+-----------+----------------+-----------+----------------------+--+
+	 
+	不精确计算：
+	select * from
+		(select name,orderdate,cost,ntile(5) over(order by orderdate ) cdnum from  business) tmp
+	where cdnum=1 
+	+-----------+----------------+-----------+------------+--+
+	| tmp.name  | tmp.orderdate  | tmp.cost  | tmp.cdnum  |
+	+-----------+----------------+-----------+------------+--+
+	| jack      | 2017-01-01     | 10        | 1          |
+	| tony      | 2017-01-02     | 15        | 1          |
+	| tony      | 2017-01-04     | 29        | 1          |
+	+-----------+----------------+-----------+------------+--+
+
+ 
+ 
+(8)查询顾客的购买明细及顾客最近三次cost花费 
+	最近三次：当前和之前两次; 当前+前一次+后一次
+				
+	当前和之前两次:
+	select name,orderdate,cost,sum(cost) 
+		over(partition by name order by orderdate rows between 2 PRECEDING and CURRENT  row) 
+	from business 
+	 
+	当前+前一次+后一次: [注意前后一次指的是当前行的前后各一行]
+	select name,orderdate,cost,sum(cost) 
+		over(partition by name order by orderdate rows between 1 PRECEDING and 1 FOLLOWING) 
+	from business	
+	+-------+-------------+-------+---------------+--+
+	| name  |  orderdate  | cost  | sum_window_0  |
+	+-------+-------------+-------+---------------+--+
+	| jack  | 2017-01-01  | 10    | 56            |
+	| jack  | 2017-01-05  | 46    | 111           |
+	| jack  | 2017-01-08  | 55    | 124           |
+	| jack  | 2017-02-03  | 23    | 120           |
+	| jack  | 2017-04-06  | 42    | 65            |
+	| mart  | 2017-04-08  | 62    | 130           |
+	| mart  | 2017-04-09  | 68    | 205           |
+	| mart  | 2017-04-11  | 75    | 237           |
+	| mart  | 2017-04-13  | 94    | 169           |
+	| neil  | 2017-05-10  | 12    | 92            |
+	| neil  | 2017-06-12  | 80    | 92            |
+	| tony  | 2017-01-02  | 15    | 44            |
+	| tony  | 2017-01-04  | 29    | 94            |
+	| tony  | 2017-01-07  | 50    | 79            |
+	+-------+-------------+-------+---------------+--+
+
+	 
+	或
+	select name,orderdate,cost,cost+
+		lag(cost,1,0) over(partition by name order by orderdate ) +
+		lead(cost,1,0) over(partition by name order by orderdate )
+	from business 
+ 
+ 
+
+(7)查询顾客的购买明细及顾客本月最后一次购买的时间
+	select name,orderdate,cost,
+		last_value(orderdate,true) 
+		over(partition by name,substring(orderdate,1,7) 
+		order by orderdate rows between CURRENT row and UNBOUNDED  FOLLOWING) 
+	from business 
+	+-------+-------------+-------+----------------------+--+
+	| name  |  orderdate  | cost  | last_value_window_0  |
+	+-------+-------------+-------+----------------------+--+
+	| jack  | 2017-01-01  | 10    | 2017-01-08           |
+	| jack  | 2017-01-05  | 46    | 2017-01-08           |
+	| jack  | 2017-01-08  | 55    | 2017-01-08           |
+	| jack  | 2017-02-03  | 23    | 2017-02-03           |
+	| jack  | 2017-04-06  | 42    | 2017-04-06           |
+	| mart  | 2017-04-08  | 62    | 2017-04-13           |
+	| mart  | 2017-04-09  | 68    | 2017-04-13           |
+	| mart  | 2017-04-11  | 75    | 2017-04-13           |
+	| mart  | 2017-04-13  | 94    | 2017-04-13           |
+	| neil  | 2017-05-10  | 12    | 2017-05-10           |
+	| neil  | 2017-06-12  | 80    | 2017-06-12           |
+	| tony  | 2017-01-02  | 15    | 2017-01-07           |
+	| tony  | 2017-01-04  | 29    | 2017-01-07           |
+	| tony  | 2017-01-07  | 50    | 2017-01-07           |
+	+-------+-------------+-------+----------------------+--+
+ 
+ 
+(6)查询顾客的购买明细及顾客本月第一次购买的时间
+	select name,orderdate,cost,
+		first_value(orderdate,true) 
+		over(partition by name,substring(orderdate,1,7) order by orderdate ) 
+	from business
+	+-------+-------------+-------+-----------------------+--+
+	| name  |  orderdate  | cost  | first_value_window_0  |
+	+-------+-------------+-------+-----------------------+--+
+	| jack  | 2017-01-01  | 10    | 2017-01-01            |
+	| jack  | 2017-01-05  | 46    | 2017-01-01            |
+	| jack  | 2017-01-08  | 55    | 2017-01-01            |
+	| jack  | 2017-02-03  | 23    | 2017-02-03            |
+	| jack  | 2017-04-06  | 42    | 2017-04-06            |
+	| mart  | 2017-04-08  | 62    | 2017-04-08            |
+	| mart  | 2017-04-09  | 68    | 2017-04-08            |
+	| mart  | 2017-04-11  | 75    | 2017-04-08            |
+	| mart  | 2017-04-13  | 94    | 2017-04-08            |
+	| neil  | 2017-05-10  | 12    | 2017-05-10            |
+	| neil  | 2017-06-12  | 80    | 2017-06-12            |
+	| tony  | 2017-01-02  | 15    | 2017-01-02            |
+	| tony  | 2017-01-04  | 29    | 2017-01-02            |
+	| tony  | 2017-01-07  | 50    | 2017-01-02            |
+	+-------+-------------+-------+-----------------------+--+
+ 
+ 
+(5)查询顾客的购买明细及顾客下次的购买时间
+	select name,orderdate,cost,
+		lead(orderdate,1,'无数据') over(partition by name order by orderdate ) 
+	from business
+	+-------+-------------+-------+----------------+--+
+	| name  |  orderdate  | cost  | lead_window_0  |
+	+-------+-------------+-------+----------------+--+
+	| jack  | 2017-01-01  | 10    | 2017-01-05     |
+	| jack  | 2017-01-05  | 46    | 2017-01-08     |
+	| jack  | 2017-01-08  | 55    | 2017-02-03     |
+	| jack  | 2017-02-03  | 23    | 2017-04-06     |
+	| jack  | 2017-04-06  | 42    | 无数据            |
+	| mart  | 2017-04-08  | 62    | 2017-04-09     |
+	| mart  | 2017-04-09  | 68    | 2017-04-11     |
+	| mart  | 2017-04-11  | 75    | 2017-04-13     |
+	| mart  | 2017-04-13  | 94    | 无数据            |
+	| neil  | 2017-05-10  | 12    | 2017-06-12     |
+	| neil  | 2017-06-12  | 80    | 无数据            |
+	| tony  | 2017-01-02  | 15    | 2017-01-04     |
+	| tony  | 2017-01-04  | 29    | 2017-01-07     |
+	| tony  | 2017-01-07  | 50    | 无数据            |
+	+-------+-------------+-------+----------------+--+
+ 
+ 
+(4)查询顾客的购买明细及顾客上次的购买时间 // 偏移量 null值的替换
+	select name,orderdate,cost,
+		lag(orderdate,1,'无数据') over(partition by name order by orderdate ) 
+	from business
+	+-------+-------------+-------+---------------+--+
+	| name  |  orderdate  | cost  | lag_window_0  |
+	+-------+-------------+-------+---------------+--+
+	| jack  | 2017-01-01  | 10    | 无数据           |
+	| jack  | 2017-01-05  | 46    | 2017-01-01    |
+	| jack  | 2017-01-08  | 55    | 2017-01-05    |
+	| jack  | 2017-02-03  | 23    | 2017-01-08    |
+	| jack  | 2017-04-06  | 42    | 2017-02-03    |
+	| mart  | 2017-04-08  | 62    | 无数据           |
+	| mart  | 2017-04-09  | 68    | 2017-04-08    |
+	| mart  | 2017-04-11  | 75    | 2017-04-09    |
+	| mart  | 2017-04-13  | 94    | 2017-04-11    |
+	| neil  | 2017-05-10  | 12    | 无数据           |
+	| neil  | 2017-06-12  | 80    | 2017-05-10    |
+	| tony  | 2017-01-02  | 15    | 无数据           |
+	| tony  | 2017-01-04  | 29    | 2017-01-02    |
+	| tony  | 2017-01-07  | 50    | 2017-01-04    |
+	+-------+-------------+-------+---------------+--+
+ 
+ 
+ 
+(3)查询顾客的购买明细要将cost按照日期进行累加，默认最开始到当前行
+	select name,orderdate,cost,sum(cost) over(partition by name order by orderdate ) 
+	from business
+	------------------等价于-------------------------
+	select name,orderdate,cost,sum(cost) 
+	over(partition by name order by orderdate rows between unbounded preceding and current row) 
+	from business
+	+-------+-------------+-------+---------------+--+
+	| name  |  orderdate  | cost  | sum_window_0  |
+	+-------+-------------+-------+---------------+--+
+	| jack  | 2017-01-01  | 10    | 10            |
+	| jack  | 2017-01-05  | 46    | 56            |
+	| jack  | 2017-01-08  | 55    | 111           |
+	| jack  | 2017-02-03  | 23    | 134           |
+	| jack  | 2017-04-06  | 42    | 176           |
+	| mart  | 2017-04-08  | 62    | 62            |
+	| mart  | 2017-04-09  | 68    | 130           |
+	| mart  | 2017-04-11  | 75    | 205           |
+	| mart  | 2017-04-13  | 94    | 299           |
+	| neil  | 2017-05-10  | 12    | 12            |
+	| neil  | 2017-06-12  | 80    | 92            |
+	| tony  | 2017-01-02  | 15    | 15            |
+	| tony  | 2017-01-04  | 29    | 44            |
+	| tony  | 2017-01-07  | 50    | 94            |
+	+-------+-------------+-------+---------------+--+
+
+
+ 
+(2)查询顾客的购买明细及月购买总额
+	select name,orderdate,cost,sum(cost) over(partition by name,substring(orderdate,1,7)) 
+	from business 
+	没有去重的功能！
+	+-------+-------------+-------+---------------+--+
+	| name  |  orderdate  | cost  | sum_window_0  |
+	+-------+-------------+-------+---------------+--+
+	| jack  | 2017-01-01  | 10    | 111           |
+	| jack  | 2017-01-05  | 46    | 111           |
+	| jack  | 2017-01-08  | 55    | 111           |
+	| jack  | 2017-02-03  | 23    | 23            |
+	| jack  | 2017-04-06  | 42    | 42            |
+	| mart  | 2017-04-13  | 94    | 299           |
+	| mart  | 2017-04-08  | 62    | 299           |
+	| mart  | 2017-04-09  | 68    | 299           |
+	| mart  | 2017-04-11  | 75    | 299           |
+	| neil  | 2017-05-10  | 12    | 12            |
+	| neil  | 2017-06-12  | 80    | 80            |
+	| tony  | 2017-01-04  | 29    | 94            |
+	| tony  | 2017-01-07  | 50    | 94            |
+	| tony  | 2017-01-02  | 15    | 94            |
+	+-------+-------------+-------+---------------+--+
+ 
+ 
+ 
+(1)查询在2017年4月份购买过的顾客及总人数
+
+	count(*)在分组后，统计一个组内所有的数据！
+		默认情况下统计的是每个组的个数，重新定义统计范围，over()
+
+	传统写法： 效率低【4个job】
+	with tmp as 
+		(select name from business where year(orderdate)=2017 and month(orderdate)=4 group by name)
+	select tmp.name,tmp1.totalcount from (select count(*) totalcount from tmp ) tmp1 join tmp;
+
+	
+	// 统计有多少组
+	按照name分组，对分组以后的每一个结果执行count(*)，统计的边界为整个结果集；
+	-------------------------------------------------------------------------------------
+	select 
+		name,count(*) over(rows between UNBOUNDED  PRECEDING and UNBOUNDED  FOLLOWING)
+	from business where substring(orderdate,1,7)='2017-04' group by name
+
+	等价于
+	select name,count(*) over() from business 
+		where substring(orderdate,1,7)='2017-04' group by name
+	+-------+-----------------+--+
+	| name  | count_window_0  |
+	+-------+-----------------+--+
+	| jack  | 2               |
+	| mart  | 2               |
+	+-------+-----------------+--+
+	
+	
+	
+
+
+	
+	
+
+四、排名函数
+	注意：排名函数可以跟over()，但是不能定义window_clause.
+		  在计算名次前，需要先排序！
+		  
+	RANK:           允许并列，一旦有并列跳号！rank
+	ROW_NUMBER:     行号！连续的，每个号之间差1！row_number
+	DENSE_RANK：    允许并列，一旦有并列不跳号！dense_rank
+	CUME_DIST：     从排序后的第一行到当前值之间数据占整个数据集的百分比！cume_dist
+	PERCENT_RANK：  rank-1 / 总数据量-1 ! percent_rank
+	NTILE(x):       将数据集均分到X个组中，返回每条记录所在的组号! ntile，多余的从前向后补
+
+	select  *,
+		rank() over(order by score) ranknum,
+		row_number() over(order by score) rnnum,
+		dense_rank() over(order by score) drnum,
+		cume_dist() over(order by score) cdnum,
+		percent_rank() over(order by score) prnum
+	from score
+
+	select  *,ntile(5) over() from score
+
+	
+	name    subject 	score  rank  dense_rank row_number
+	悟空  	数学    	95      1       1       	1
+	宋宋    数学   		86      2       2      	 	2
+	婷婷    数学   	    85      3       3       	3
+	大海    数学    	56      4       4       	4
+
+	宋宋    英语    	84      1       1       	1
+	大海    英语    	84      1       1       	2
+	婷婷    英语    	78      3       2       	3
+	悟空  	英语    	68      4       3       	4
+	
+	
+	
+	
+练习
+	score.name  | score.subject  | score.score
+
+	// 按照科目进行排名
+	select *,rank() over(partition by subject order by score desc) from score
+
+	// 给每个学生的总分进行排名
+	// 输出4条记录
+	select name,sumscore,rank() over(order by sumscore desc)
+	from (select name,sum(score) sumscore from  score group by  name) tmp
+
+
+	// 求每个学生的成绩明细及给每个学生的总分和总分排名
+	select *,DENSE_RANK() over(order by tmp.sumscore desc)
+	from (select *,sum(score) over(partition by name) sumscore from score) tmp
+
+
+	// 只查询每个科目的成绩的前2名
+	select * from
+	(select *,rank() over(partition by subject order by score desc) rn from score) tmp
+	where rn<=2
+
+	//查询学生成绩明细，并显示当前科目最高分
+	select *,max(score) over(partition by subject) from score
+
+	或 // 求的是每个分区窗口的第一个值
+	select *,FIRST_VALUE(score) over(partition by subject order by score desc) from score
+
+
+	//查询学生成绩，并显示当前科目最低分
+	select *,min(score) over(partition by subject) from score
+
+	或
+	select *,FIRST_VALUE(score) over(partition by subject order by score ) from score
+
+

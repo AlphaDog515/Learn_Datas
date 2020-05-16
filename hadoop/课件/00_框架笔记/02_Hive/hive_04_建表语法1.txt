@@ -1,0 +1,44 @@
+一、表操作
+
+1.增
+	CREATE [EXTERNAL] TABLE [IF NOT EXISTS] table_name 
+	[(col_name data_type [COMMENT col_comment], ...)]   //表中的字段信息
+	[COMMENT table_comment] //表的注释
+
+	[PARTITIONED BY (col_name data_type [COMMENT col_comment], ...)] 
+	[CLUSTERED BY (col_name, col_name, ...) 
+	[SORTED BY (col_name [ASC|DESC], ...)] INTO num_buckets BUCKETS] 
+
+	[ROW FORMAT row_format]  // 表中数据每行的格式，定义数据字段的分隔符，集合元素的分隔符等
+
+	[STORED AS file_format] //	表中的数据要以哪种文件格式来存储，默认为TEXTFILE（文本文件）
+							可以设置为SequnceFile或 Paquret,ORC等
+	[LOCATION hdfs_path]  	//	表在hdfs上的位置
+
+①建表时，不带EXTERNAL，创建的表是一个MANAGED_TABLE(管理表，内部表)
+	建表时，带EXTERNAL，创建的表是一个外部表！
+	
+	外部表和内部表的区别是： 
+			内部表(管理表)在执行删除操作时，会将表的元数据(schema)和表位置的数据一起删除！
+			外部表在执行删除表操作时，只删除表的元数据(schema)
+			
+	在企业中，创建的都是外部表！
+		在hive中表是廉价的，数据是珍贵的！
+			
+	建表语句执行时： 
+			hive会在hdfs生成表的路径；
+			hive还会向MySQl的metastore库中插入两条表的信息(元数据)
+			
+	管理表和外部表之间的转换：// 默认管理表
+		将表改为外部表：	alter table p1 set tblproperties('EXTERNAL'='TRUE');				
+		将表改为管理表：	alter table p1 set tblproperties('EXTERNAL'='FALSE');		
+		注意：在hive中语句中不区分大小写，但是在参数中严格区分大小写！
+
+
+2.删 ：drop table 表名：删除表
+
+3.改 ：
+
+4.查
+		desc  表名： 查看表的描述
+		desc formatted 表名： 查看表的详细描述

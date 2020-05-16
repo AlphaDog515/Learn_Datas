@@ -1,0 +1,114 @@
+一、hbase和phoenix的对应关系
+	hbase				phoenix
+	namespace			database(库)
+	table				table（表）
+	column family		cf:cq
+	column quliafier
+	rowkey				主键
+	
+	在sql中如果建表时，指定的主键是联合主键(由多个列共同作为主键)，
+	在hbase中，rowkey就是多个主键共同拼接的结果！
+	例如：在phoneix中主键是id,name联合主键，在hbase中rowkey是id,name拼接的结果；
+		
+二、使用phoneix
+
+1. hbase中没有表，希望在phoneix中建表，在phoneix中使用SQL向hbase表中插入数据
+CREATE TABLE IF NOT EXISTS us_population (
+      state CHAR(2) NOT NULL,
+      city VARCHAR NOT NULL,
+      population BIGINT
+      CONSTRAINT my_pk PRIMARY KEY (state, city)) column_encoded_bytes=0;
+	  
+在创建表时，如果不定义列族，那么默认为0号列族！
+
+---------------------------------------
+CREATE TABLE IF NOT EXISTS "ns1"."us_population" (
+      state CHAR(2) NOT NULL,
+      city VARCHAR NOT NULL,
+      info.population BIGINT
+      CONSTRAINT my_pk PRIMARY KEY (state, city)) column_encoded_bytes=0;
+
+//"ns1.us_population"  这样写会报错	  
+upsert into "ns1"."us_population" values('NY','NewYork',8143197);
+upsert into "ns1"."us_population" values('CA','Los Angeles',3844829);
+upsert into "ns1"."us_population" values('IL','Chicago',2842518);
+
+2. hbase中已经存在表，需要在phoneix中建表，进行映射！映射后，再执行操作！
+①如果这个表只希望执行查询操作，不希望执行修改，那么可以创建View
+create view  "emp"(
+  "empno" varchar primary key, 
+   "info"."ename" varchar, 
+  "info"."job" varchar, 
+  "info"."mgr" varchar, 
+  "info"."hiredate" varchar, 
+  "info"."sal" varchar, 
+  "info"."comm" varchar, 
+  "info"."deptno" varchar
+)
+
+
+②如果这个表需要增删改查，可以创建表
+
+create table  "emp"(
+  "empno" varchar primary key, 
+   "info"."ename" varchar, 
+  "info"."job" varchar, 
+  "info"."mgr" varchar, 
+  "info"."hiredate" varchar, 
+  "info"."sal" varchar, 
+  "info"."comm" varchar, 
+  "info"."deptno" varchar
+)column_encoded_bytes=0
+
+
+create table  "t3"(
+  "id" varchar primary key, 
+   "info"."name" varchar, 
+  "info"."age" varchar, 
+  "info"."gender" varchar
+)column_encoded_bytes=0
+
+
+
+三、二级索引
+1.在hbase中，查询数据时，一般都会指定rowkey，或指定rowkey的范围！
+	rowkey称为一级索引
+	如果查询某个具体的列，hbase在高版本也支持在列上创建索引，在列上创建的索引称为二级索引！
+	之前如果要创建二级索引，需要自己调用HBase的API，写起来很麻烦！
+	
+	如果使用Phoneix，只需要一行create index 索引名 on 表名(列) SQL，Phoneix帮助我们创建二级索引！
+	
+	二级索引的目的在想执行查询某些列的数据时，加快效率！
+		
+2. 使用explain + select sql查看是否使用了索引
+	在mysql中 type=All，代表全部扫描，没有使用上索引！
+	在phoneix中如果出现了FULL SCAN ，代表没有使用上二级索引，出现了全部列扫描
+
+	测试时不能写select *;
+
+	如果出现RANGE SCAN OVER IDX_AGE，代表使用上了某个索引，进行了范围查询！
+		  
+3. 索引的使用
+	创建索引： create index idx_age on "t3"("info"."age");
+	删除索引： drop index 索引名 on 表名
+		
+4. 二级索引的分类
+	在hbase中二级索引分为gloal(全局)和local(本地)的二级索引！
+	
+	不管是全局索引还是本地索引，都是为了加快查询！从作用上说，没有区别！
+	
+	区别在于适合的场景不同：
+	
+	gloal(全局)索引，在创建后，专门在hbase中，生成一个表，将索引的信息存储在表中！
+		适合多读少写的场景！ 每次写操作，不仅要更新数据，还需要更新索引！
+		数据表在rs1，索引表在rs2中，每次发送一次put请求，必须先请求rs1，在请求rs2，才能完成更新！
+		网络开销很大，加重rs的压力！
+	
+	local(本地)索引，在创建后，在表中，创建一个列族，在这个列族中保存索引的信息！
+		适合多写少读的场景！索引是以列族的形式在表中存储，索引和数据在一个rs上，
+		此时频繁写操作时，只需要请求当前的regionserver!
+		
+			
+
+
+

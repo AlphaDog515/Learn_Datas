@@ -1,0 +1,227 @@
+
+一、项目的架构
+1.项目
+	针对电商平台的数据，构建数据仓库！为电商企业的决策提供数据支持！
+		
+		
+2.数据源
+	用户行为日志： 用户在使用商城期间，和产品（APP）交互产生的数据！
+		存储形式： 由用户访问期间，由日志服务器专门记录，
+						以日志的形式存储在日志服务器所在的机器！
+		
+		分类：  
+			启动日志：核心！每次用户只要打开应用就产生一条启动日志！
+			事件日志： 用户在执行某项特定的行为时，触发了某个事件，才会产生！
+	
+	
+	商城业务数据： 用户使用商城的某项业务，例如购物等产生的数据！
+		存储形式： 由用户在使用期间，由应用服务器专门记录，
+						以mysql中记录的形式存储在Mysql的库中！
+			
+
+			
+3.采集通道架构
+		目前三台测试机器！
+		安装了Hadoop，flume,hive,kafka!
+		
+		Flume:  在哪个机器用，就在哪台机器装！
+		
+		
+		第一层flume：		
+				hadoop102和hadoop103上有日志服务器产生的日志，必须在hadoop102和103上
+				部署flume，负责采集日志到kafka中！
+				
+				没有问题：  
+					lg 脚本：  在hadoop102和hadoop103/tmp/logs目录中生成数据
+					f1 脚本：  在kafka的topic_start和topic_event生成数据
+					
+					验证：  查看日志中有无数据！
+								无数据：lg脚本有错！
+							
+							查看kafka中有无数据！
+								无数据！查看taifdirsource的json文件，是否已经读取到日志的
+								最新位置！如果json文件读取到最新的位置，说明channel的配置
+								有问题！
+								
+								如果没有读取到最新位置，source的配置有问题
+								
+		第二层flume:
+				为了负载均衡，在hadoop104运行！目的是讲kafka中的数据采集到hdfs!
+				
+				注意：  hdfs上的路径带有时间戳！因此flume在采集时，必须为event添加时间戳的header!
+						kafkasource会自动为每个event添加时间戳！
+						
+						因此数据在hdfs上生成的目录，是启动的flume进程所在机器的当前时间！
+						
+				
+				验证：  ①启动flume后是否产生了消费者组，借助kafka tool
+							如果没有产生，可能是kafka集群和source的问题
+						
+						②如果产生，但是hdfs上没有数据，此时是sink的问题
+						
+		
+				
+4. Hive数据仓库软件
+	①元数据存储问题
+		元数据： hive中创建的表,函数,库等信息
+		hive存储元数据到mysql中！
+		
+		搭建HA的mysql!
+			a)搭建双向主从的mysql
+					保证：当前两个mysql都可以顺利同步！
+					
+			hadoop102  hadoop103
+			mydb
+			mydb2
+			
+			在hadoop102 执行drop database mydb，由于hadoop103上没有这个数据库，所以hadoop103会卡住，
+				因此在同步的时候不能操作另一台机器不存在的库表等！
+			
+			b) 搭建故障的自动转移
+					借助keepalived服务，通过启动这个服务，持有一个虚拟ip！
+					虚拟ip再讲请求转发到真实的mysql服务器！
+					
+				保证开机自启动keepalived!
+					sudo service keepalived start!
+				检查是否开机启动： 
+					sudo chkconfig --list keepalived
+				0:开启 1:关闭 .....
+				
+				开启全级别的开机自启动：
+					sudo chkconfig  keepalived on
+				
+				
+				
+	②执行函数报错： SematicException
+		SQL语句无法翻译为执行的MR程序！
+			语法不对！
+			语句中有识别不了的单词！
+		
+		验证：  单独使用函数，看是否可以！
+				自定义的函数有库的概念！必须在当前库下使用函数！或在函数前加上库名！
+	
+	
+	③数仓的分层
+		目的：  讲负责的需求拆分为若干步骤！减少同质需求的重复查询！
+		要求：  不能跨层查询！层与层之间只能依次调用！
+		
+				原始数据----->ODS------->DWD------->DWS------->ADS
+				
+				
+		导入数据命令： load insert
+			从原始数据----->ODS：可以用load，ODS数据的特点是保持和之前数据的原貌不变！
+						还需要查看ODS的表中数据的存储格式，是否为ORC或parquet等特殊格式，如果是
+						非TEXTFILE格式，只能使用insert!
+						
+			从HDFS load数据，是一个MV操作，讲采集目录中的数据移动到数据仓库表中！
+			
+			
+	④SQL在工具中可以运行，在脚本中运行报错
+			a)日期参数穿进去后是否有格式问题
+			b)在脚本中，没有引用库，在使用函数时，通常也是找不到函数！
+			
+	④如果HQL语句提交到YARN上执行卡住！
+		通常情况是你的内存不够！
+		如果卡住后，此时在执行其他的HQL，也无济于事！
+		YARN默认使用容量调度器，默认只有一个队列！队列中是FIFO(First Input First Output)！
+		
+		需要把队列中的job杀死，杀死后再运行其他的HQL！
+	
+
+
+	insert into 数据导入重复了无法修改，只能删除导入数据的文件，重新导入一份
+	hive中join的实现较较复杂，尽量少用！	
+				
+				
+				
+ 
+ 
+
+
+
+一、注意事项
+	1.动态分区
+		动态分区： 分区是在数据插入时，根据某一列的列值动态生成！
+
+		向周活跃明细和月活跃明细表中插入数据时！
+		
+		例如： 向月活跃明细表插入数据
+		
+		传入的参数： 2020-02-14
+		
+		date_format('2020-02-14','yyyy-MM')
+		
+		insert overwrite TABLE gmall.dws_uv_detail_mn PARTITION(mn)
+		
+		partition() 不能写变量，只能写常量，采用动态分区解决，开启分区的非严格模式 		
+			
+	2.  如果目标表是分区表，在插入数据时，一般使用insert overwrite,防止程序中断，造成数据重复！
+			dws层和dwd层和ods层，都创建分区表！
+		
+		如果目标表不是分区表，通常在插入数据时，一般使用insert into，每次只追加当次的内容
+			ads层创建非分区表
+			
+			
+	3.  尽量多使用行列过滤
+			行过滤：  a join b where a.xxx=xxx时，可以先讲a表过滤，过滤后再join
+			列过滤：  不写select * ，按需查询
+			
+			
+	4.  在select语句后，可以随意写常量！
+	
+	
+	
+	5.	SQL中聚合函数不一定要和group by联合使用，
+		聚合函数是对一组值执行计算，并返回单个值，也被称为组函数。 
+		聚合函数可以应用于SELECT查询语句的GROUP BY，HAVING子句中，
+		但不可用于WHERE语句中，因为WHERE是对逐条的行记录进行筛选。
+		这样可以：select max(subtotal) from dws_user_total_count_day where dt < '2020-02-20'
+	
+	6.	a.x < b.y 或者 a.x like b.y等在hive中不支持，hive语法解析会直接抛出错误，
+		但是可以这样写：		
+		select a.start_level, b.*
+		from dim_level a join (select * from test) b 
+		where b.xx>=a.start_level and b.xx<end_level;
+		hive中join的关联键必须在ON()中指定，不能在Where中指定，否则就会先做笛卡尔积，再过滤。
+	
+	7.	hive中可以使用full join，注意full join会产生很多空的字段。
+		union和union all：union去除重复记录并按照默认规则排序，union all直接放在一起不去重；
+		不管是full join还是union都不会将对应位置数据相加减等，只是简单的匹配在一起。
+			UNION 内部的 SELECT 语句必须拥有相同数量的列；
+			列也必须拥有相似的数据类型（实际非必须）；
+			同时，每条 SELECT 语句中列的顺序必须相同。
+		join没有按照指定字段连接，没有的使用空值代替；
+			
+	8.	select * from dws_user_action_wide_log t1 where # 需要加别名
+		mid_id in (select mid_id from dws_user_action_wide_log where dt<'2020-02-19'
+		and favorite_count>0) # 子查询不加别名
+		
+	9.	开窗里面的字段必须在select中存在，DISTINCT不能与group by联合使用		
+		lag(dt,2,'1970-1-1') over(partition by user_id order by dt)
+		lead(dt,1,'1970-1-1') over(partition by user_id order by dt)
+		写order by不写window子句，默认是上边界到当前行。
+		
+	10.	select t1.goodsid,t1.category c1,total,
+			rank() over(partition by c1 order by total desc ) rn
+		where rn <=10
+		错误1：over里面不能用别名，应该使用t1.category;
+		错误2：不能加rn <= 10，没有这个结果就使用！
+	
+	11.	select count(*) from dws_new_mid_day where create_date='2020-02-10' 		可以这样写
+		select mid_id,count(*) from dws_new_mid_day where create_date='2020-02-10' 	不可以这样写
+		// 聚合函数与普通字段连用应该添加group by!
+	
+	12. count(distinct id)效率比group by低！
+	
+	13.	SELECT DISTINCT(DATE_FORMAT(create_time,'%Y-%m-%d')) FROM sku_info 		MySQL的写法！
+
+	
+	书写sql的步骤：
+		① 右键导出需要查询的字段；
+		② 分析各个查询字段的含义，确定每个字段的来源；
+		③ 一步一步查询各个阶段的结果，用临时表命名；
+		④ 合并所有中间结果；
+	
+	
+	
+	

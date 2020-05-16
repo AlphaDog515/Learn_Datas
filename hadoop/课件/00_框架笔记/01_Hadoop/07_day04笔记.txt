@@ -1,0 +1,509 @@
+
+一、HDFS
+1. HDFS的本质是一个文件系统，特点是分布式，需要在多台机器启动多个NN,DN进程组成一个分布式系统
+
+2. HDFS不支持对一个文件的并发写入，也不支持对文件的随机修改，
+	不适合存储小文件(存储小文件时会降低NN的服务能力)
+
+3. HDFS的块大小
+		块大小可以通过hdfs-site.xml中的dfs.blocksize进行配置！
+		如果不配置，那么在hadoop1.x时，dfs.blocksize=64M，在hadoop2.xdfs.blocksize=128M
+		
+		默认值为128M的原因：
+			hadoop默认使用hadoop的集群的机器都采用普通的机器磁盘！
+			
+			基于最佳传输消耗理论，一次传输中寻址时间为总传输时间的1%为最佳状态！
+			
+			目前机器磁盘的寻址时间普遍为10ms,  10ms / 1% * 磁盘的写入速度(100M/S)=100M 
+			
+		如果公司的磁盘写入速度为300M/S，可以将dfs.blocksize=256M，
+		如果公司的磁盘写入速度为500M/S，可以将dfs.blocksize=512M。
+		
+		
+		块大小不能太小：
+				如果块太小，会造成降低NN的服务能力！
+				在读取和上传一个大的文件时带来额外的寻址时间消耗！
+				
+		块大小不能太大：
+				如果块太大，在一次上传时，如果发生异常，需要重新传输，造成网络IO资源的浪费！
+				在随机读取某部分内容时，不够灵活！
+				
+4. 两个概念
+		块大小指的是块的极限值！
+		副本数指的也是副本的最大值！
+		
+		这两个参数都是在客户端上传文件时指定！
+		
+5. 块的属性
+		length:  块的实际大小
+		offset:  块的偏移量，这个块从文件的哪部分开始保存数据
+		
+		
+		
+二、使用客户端操作hdfs
+1.使用shell客户端
+		hadoop fs 命令 参数： 既可以操作本地模式的HDFS也可以操作分布式的HDFS
+		hdfs dfs  命令 参数： 只操作分布式的HDFS
+		
+2.使用javaapi
+FileSystem: 客户端的基类
+		LocalFileSystem: 本地文件系统
+		DistributedFileSystem: 分布式文件系统
+		
+		具体的实现取决于配置文件的fs.defaultFS参数的配置！
+		
+Configuration:  负责读取配置文件中的参数，保存到一个map中！
+		默认Configuration会读取类路径下8个配置文件！
+		
+		Configuration.set(name,value): 手动添加属性
+		
+Path :  一个文件的路径
+		Path.toString() : 输出文件的完整的URI（协议+路径）
+		Path.getName()  : 输出文件名
+			
+FileStatus: 文件的状态(文件的属性信息)
+		LocatedFileStatus: 除了包含文件的属性信息，
+		还包含文件所有的块的位置信息(length，offset,hosts)
+		
+		FileSystem.listStatus(Path p)  |  FileSystem.getFileStatus(Path p)
+		
+		
+2.自定义上传和下载
+	上传：获取本地文件系统对文件文件的一个输入流，读取文件，
+				将读到的数据通过HDFS上对目标路径的输出流，进行写出！
+				
+	下载：获取HDFS文件系统对文件的一个输入流，读取文件，
+				将读到的数据通过本地文件系统上对目标路径的输出流，进行写出！
+
+	① 获取文件系统上对某个路径的输入流 ：DFSFileInputStream is=FileSystem.open(Path p);
+	② 获取文件系统上对某个路径的输出流 ：FileSystem.create(Path p);
+	③ 数据的拷贝：OUtils.copyBytes(in,out,4096,true);
+	④ 定位读取：  DFSFileInputStream.seek(int offset);
+
+	
+	
+三、文件的读写流程
+1.写流程
+	①启动服务端NN,DN进程，提供一个分布式文件系统客户端
+	
+	②由客户端向NN发送请求，请求上传一个文件，
+		NN对请求进行合法性检查(权限，路径是否合法，路径是否已经存在)
+		
+	③如果合法，NN响应客户端允许上传
+	
+	④客户端根据自己设置的块大小，读取文件中第一块的内容，请求NN分配DN列表
+	
+	⑤NN参考客户端上传的文件的副本数，根据机架感知，返回对应的DN列表
+	
+	⑥客户端会请求举例最近的DN节点，再由DN列表中的每个DN节点都请求距离最近的DN节点，建立数据传输通道
+	
+	⑦通道建立完成，客户端将第一块的数据，封装为一个个packet，发送到通道的下一个节点
+		通道的每一个DN节点在收到packet后，进行校验，
+		检验合法，罗盘存储，将packet发送到下一个DN节点，回复客户端ack确认消息！
+		
+	⑧第一个块传输完成后，DN向NN上报块的消息，只要有一个DN节点上报块信息,
+		NN就认为这个块已经传输完成，通道关闭，开始下一个块的传输
+		
+	⑨下一个块依次按照④-⑧流程传输
+	
+	⑩所有的块传输完成后，NN响应客户端传输完成，客户端关闭输出流
+
+	
+	
+2.异常写流程
+	在写流程的⑦，客户端每封装一个packet(64K),将packet存储到dataQuene队列中，
+	在发送时，将dataQuene队列中的每个packet依次发送到通道，
+	packet在发送到通道后，会从dataQuene中移动到ackQuene队列！
+
+	一旦一个packet收到了所有dn节点回复的ack确认消息，ackQuene中的这个packet会被删除！
+	
+	如果在收到确认消息时，超时，此时中断传输，所有外部的packet，
+	会立刻回滚到dataQuene，重新建立传输通道，
+	剔除坏的节点，继续传输，只要有传输完成后，DN向NN上报块的消息，
+	只要有一个DN节点上报块信息,NN就认为这个块已经传输完成，通道关闭。
+
+	副本数如果暂时不满足条件，之后NN会自动检查，维护副本数！
+	
+	
+
+3.读流程
+	①启动服务端NN,DN进程，提供一个分布式文件系统客户端
+	
+	②由客户端向NN发送请求，请求下载一个文件，NN对请求进行合法性检查(权限，路径是否合法)
+	
+	③如果合法，NN响应客户端允许下载，同时返回当前下载文件的所有元数据信息(块的映射信息)
+	
+	④客户端根据返回的元数据信息，去每个对应的DN节点按照顺序依次下载每个块
+	
+	
+	
+4.拓扑距离
+	拓扑距离指网络中各个节点之间抽象的一种距离！通常指两个节点到达共同祖先节点的和！
+		一般为2n
+		
+		
+5.机架感知
+	2.7.2的默认的机架感知策略：
+	在本地机架挑选一个节点，保存第一个副本！
+		如果本地机架没有DN节点，挑选距离本地机架最近的一个节点！
+		
+	在本机机架挑选另一个节点，保存第二个副本！
+		如果本地机架没有DN节点，挑选距离本地机架最近的一个节点！
+		
+	在其他机架选择一个节点，保存第三个副本！
+	
+
+
+	
+一、NN的工作原理
+1.NN的作用
+		NN保存HDFS上所有文件的元数据！
+		NN负责接受客户端的请求！
+		NN负责接受DN上报的信息，给DN分配任务(维护副本数)！
+		
+		
+2.元数据的存储
+		元数据存储在fsiamge文件+edits文件中！
+		
+		fsimage(元数据的快照文件)
+		edits(记录所有写操作的文件)
+		
+		NN负责集群中所有客户端的请求和所有DN的请求！在一个集群中，通常NN需要一个高配置，
+		保证NN可以及时处理客户端或DN的请求，一旦NN无法及时处理请求，HDFS就已经瘫痪！
+		
+		
+	fsimage文件的产生：	
+		①第一次格式化NN时，此时会创建NN工作的目录，其次在目录中生成一个
+			fsimage_000000000000文件
+		
+		seen_txid记录是最新的edits_inprogress文件末尾的数字
+		fsimage_N文件存储的N号事务前的所有的元数据信息
+		fsimage_00000000000000002.md5 存储的是fsimage文件的md5校验码
+		
+		②当NN在启动时，NN会将所有的edits文件和fsiamge文件加载到内存合并得到最新的元数据，
+			将元数据持久化到磁盘生成新的fsimage文件
+		
+		③如果启用了2nn,2nn也会辅助NN合并元数据，会将合并后的元数据发送到NN
+		
+
+		
+	edits：
+		NN在启动之后，每次接受的写操作请求，都会将写命令记录到edits文件中，edits文件每间隔
+		一定的时间和大小滚动！				
+				
+	txid ：
+		每次写操作命令，分解为若干步，每一步都会有一个id，这个id称为txid!
+		
+		
+		
+	NN的元数据分两部分：
+		①inodes : 记录在fsimage文件中或edits文件中
+		②blocklist: 块的位置信息（每次DN在启动后，自动上报的）
+				
+				
+		
+二、HDFS集群的注册
+1.每次格式化NN，会产生一个VERSION文件，VERSION记录的是NN的集群的信息
+		
+	每次格式化NN时，重新生成clusterID和
+		blockpoolID(会被DN领取，生成一个同名的目录，每次DN启动时，会将这个同名目录中的块上报NN)
+
+		NN中的VERSION	
+			#Fri Dec 27 09:52:44 CST 2019
+			namespaceID=799563541
+			clusterID=CID-04320dd6-1945-4169-b60b-b61f0b643614
+			cTime=0
+			storageType=NAME_NODE
+			blockpoolID=BP-389286689-192.168.6.101-1577411564725
+			layoutVersion=-63
+
+		DN的VERSION
+			#Fri Dec 27 09:14:13 CST 2019
+			storageID=DS-3992957c-4a8d-4380-8851-30d9e8456db0
+			clusterID=CID-55996376-afa6-4e43-81ef-0ff2f50527f4
+			cTime=0
+			datanodeUuid=30290a9f-fe2b-4e55-9969-f8aba8d47723
+			storageType=DATA_NODE
+			layoutVersion=-56
+
+	DN在第一次启动时，如果没有VERSION信息，会向配置文件中配置的NN发起请求，生成VERSION，加入到集群！
+
+
+
+三、安全模式
+1.NN在启动时，当NN将所有的元数据加载完成后，等待DN来上报块的信息
+
+	当NN中所保存的所有块的最小副本数(默认为1) / 块的总数 > 99.99%时，NN会自动离开安全模式！
+
+	在安全模式，客户端只能进行有限读操作！不能写！
+		
+		
+		
+		
+四、总结
+1. NN主要负责元数据的存储
+
+2. 两种存储的文件格式
+		edits:  在NN启动后，保存新写入的命令
+		fsimage: 在合并了edits和fsimage文件后，将新的元数据持久化到新的fsimage文件中
+				 合并的时机：需要满足checkpoint的条件
+						①默认1h
+						②两次checkpoint期间已经额外产生了100w txid的数据
+									
+3. 存储的元数据分为两种
+		①inodes : 记录文件的属性和文件由哪些块组成，记录到edits和fsimage文件中
+		②块的位置映射信息：由NN启动后，接收DN的上报，动态生成！
+		
+		
+4. NN的启动过程
+	①先加载fsimage_000000xx文件
+	
+	②将fsimage文件xx之后的edits文件加载
+	
+	③合并生成最新的元数据，记录checkpoint，如果满足要求，执行saveNamespace操作，
+		不满足等满足后执行saveNamespace操作必须在安全模式执行
+	
+	④自动进入安全模式，等待DN上报块
+		DN上报的块的最小副本数总和 / 块的总数 > 0.999,自动在30s离开安全模式！
+		
+		安全模式只能有限读，不能写！
+
+
+
+		
+		
+		
+一、解决HDFS上小文件的存储
+1.从源头上解决
+		在上传时，将多个小文件归档
+		tar -zcvf xxx.tar.gz 小文件列表
+		
+2.如果小文件已经上传到HDFS了，可以使用在线归档
+		在线归档的功能实际是一个MR程序，这个程序将HDFS已经存在的多个小文件归档为一个归档文件！
+		
+		
+		
+二、MR的核心编程思想
+1.概念
+	Job(作业) : 一个MR程序称为一个Job
+	
+	MRAppMaster（MR任务的主节点）: 一个Job在运行时，会先启动一个进程，这个进程为 MRAppMaster。
+			负责Job中执行状态的监控，容错，和RM申请资源，提交Task等！
+				
+	Task(任务)：Task是一个进程！负责某项计算！
+	
+	Map(Map阶段): Map是MapReduce程序运行的第一个阶段！
+			Map阶段的目的是将输入的数据，进行切分。将一个大数据，切分为若干小部分！
+			切分后，每个部分称为1片(split)，每片数据会交给一个Task（进程）进行计算！
+						
+			Task负责是Map阶段程序的计算，称为MapTask!
+						
+			在一个MR程序的Map阶段，会启动N（取决于切片数）个MapTask。每个MapTask是并行运行！
+						
+	Reduce(Reduce阶段)：Reduce是MapReduce程序运行的第二个阶段(最后一个阶段)！
+			Reduce阶段的目的是将Map阶段，每个MapTask计算后的结果进行合并汇总！得到最终结果！
+			Reduce阶段是可选的！
+			
+			Task负责是Reduce阶段程序的计算，称为ReduceTask!
+			一个Job可以通过设置，启动N个ReduceTask，这些ReduceTask也是并行运行！
+			每个ReduceTask最终都会产生一个结果！
+						
+						
+2.MapReduce中常用的组件
+	①Mapper: map阶段核心的处理逻辑
+	
+	②Reducer: reduce阶段核心的处理逻辑
+	
+	③InputFormat: 输入格式
+		MR程序必须指定一个输入目录，一个输出目录！
+		InputFormat代表输入目录中文件的格式！
+		如果是普通文件，可以使用FileInputFormat.
+		如果是SequeceFile（hadoop提供的一种文件格式），可以使用SequnceFileInputFormat.
+		如果处理的数据在数据库中，需要使用DBInputFormat
+			
+	④RecordReader: 记录读取器
+		RecordReader负责从输入格式中，读取数据，读取后封装为一组记录(k-v)!
+				
+	⑤OutPutFormat: 输出格式
+		OutPutFormat代表MR处理后的结果，要以什么样的文件格式写出！
+		将结果写出到一个普通文件中，可以使用FileOutputFormat！
+		将结果写出到数据库中，可以使用DBOutPutFormat！
+		将结果写出到SequeceFile中，可以使用SequnceFileOutputFormat
+		
+	⑥RecordWriter: 记录写出器
+		RecordWriter将处理的结果以什么样的格式，写出到输出文件中！
+		
+		
+		
+	在MR中数据的流程：
+		①InputFormat调用RecordReader，从输入目录的文件中，读取一组数据，封装为keyin-valuein对象
+		
+		②将封装好的key-value，交给Mapper.map()------>将处理的结果写出 keyout-valueout
+		
+		③ReduceTask启动Reducer，使用Reducer.reduce()处理Mapper写出的keyout-valueout
+		
+		④OutPutFormat调用RecordWriter，将Reducer处理后的keyout-valueout写出到文件
+	
+	
+	⑦Partitioner: 分区器
+		分区器，负责在Mapper将数据写出时，将keyout-valueout，为每组keyout-valueout打上标记，进行分区！
+		目的： 一个ReduceTask只会处理一个分区的数据！
+				
+
+				
+三、MapReduce的运行流程概述
+	需求： 	统计/hello目录中每个文件的单词数量，
+			a-p开头的单词放入到一个结果文件中，
+			q-z开头的单词放入到一个结果文件中。
+		
+	例如： /hello/a.txt   200M
+			hello,hi,hadoop
+			hive,hadoop,hive,
+			zoo,spark,wow
+			zoo,spark,wow
+			...
+		   /hello/b.txt    100m
+		   hello,hi,hadoop
+		   zoo,spark,wow
+		   ...
+
+	1.Map阶段(运行MapTask，将一个大的任务切分为若干小任务，处理输出阶段性的结果)
+		①切片(切分数据)
+			/hello/a.txt    200M
+			/hello/b.txt    100m
+
+			默认的切分策略是以文件为单位，以文件的块大小(128M)为片大小进行切片！
+			split0: /hello/a.txt,0-128M
+			split1: /hello/a.txt,128M-200M
+			split2: /hello/b.txt,0M-100M
+
+		②运行MapTask（进程），每个MapTask负责一片数据
+			split0:	/hello/a.txt,0-128M--------MapTask1
+			split1: /hello/a.txt,128M-200M--------MapTask2
+			split2: /hello/b.txt,0M-100M--------MapTask3
+
+		③读取数据阶段
+			在MR中，所有的数据必须封装为key-value
+			MapTask1,2,3都会初始化一个InputFormat（默认TextInputFormat），
+			每个InputFormat对象负责创建一个RecordReader(LineRecordReader)对象，
+			RecordReader负责从每个切片的数据中读取数据，封装为key-value.
+			
+			LineRecordReader: 将文件中的每一行封装为一个key（offset）-value(当前行的内容)
+			举例：
+			hello,hi,hadoop----->(0,hello,hi,hadoop)
+			hive,hadoop,hive----->(20,hive,hadoop,hive)
+			zoo,spark,wow----->(30,zoo,spark,wow)
+			zoo,spark,wow----->(40,zoo,spark,wow)
+
+		④进入Mapper的map()阶段
+			map()是Map阶段的核心处理逻辑！ 
+			单词统计! map()会循环调用，对输入的每个Key-value都进行处理！
+			输入：(0,hello,hi,hadoop)
+			输出：(hello,1),(hi,1),(hadoop,1)  
+			
+			输入：(20,hive,hadoop,hive)
+			输出：(hive,1),(hadoop,1),(hive,1)  
+
+			输入：(30,zoo,spark,wow)
+			输出：(zoo,1),(spark,1),(wow,1)  
+			
+			输入：(40,zoo,spark,wow)
+			输出：(zoo,1),(spark,1),(wow,1) 
+
+			
+		⑤目前，我们需要启动两个ReduceTask,生成两个结果文件，
+		需要将MapTask输出的记录进行分区(分组，分类)
+		在Mapper输出后，调用Partitioner，对Mapper输出的key-value进行分区，
+		分区后也会排序（默认字典顺序排序）
+		分区规则： a-p开头的单词放入到一个区
+				   q-z开头的单词放入到另一个区
+		MapTask1:		   
+		0号区：(hadoop,1)，(hadoop,1)，(hello,1),(hi,1),(hive,1),(hive,1)
+		1号区：(spark,1),(spark,1),(wow,1) ，(wow,1),(zoo,1)(zoo,1)
+
+		MapTask2:		   
+		0号区： ...
+		1号区： ...
+
+		MapTask3:		   
+		0号区： (hadoop,1),(hello,1),(hi,1),
+		1号区： (spark,1),(wow,1),(zoo,1)
+
+		
+	2.Reduce阶段
+		①copy
+			ReduceTask启动后，会启动shuffle线程，从MapTask中拷贝相应分区的数据！
+			
+			ReduceTask1: 只负责0号区
+				将三个MapTask，生成的0号区数据全部拷贝到ReduceTask所在的机器！
+				(hadoop,1)，(hadoop,1)，(hello,1),(hi,1),(hive,1),(hive,1)
+				(hadoop,1),(hello,1),(hi,1),
+				
+				
+			ReduceTask2: 只负责1号区
+				将三个MapTask，生成的1号区数据全部拷贝到ReduceTask所在的机器！
+				(spark,1),(spark,1),(wow,1) ，(wow,1),(zoo,1)(zoo,1)
+				(spark,1),(wow,1),(zoo,1)
+			
+		②sort
+			ReduceTask1 : 只负责0号区进行排序：
+				(hadoop,1)，(hadoop,1)，(hadoop,1),(hello,1),(hello,1),(hi,1),(hi,1),(hive,1),(hive,1)
+			
+			ReduceTask2: 只负责1号区进行排序：
+				(spark,1),(spark,1),(spark,1),(wow,1),(wow,1),(wow,1),(zoo,1),(zoo,1)(zoo,1)
+			
+	③reduce
+		ReduceTask1---->Reducer----->reduce(一次读入一组数据)
+		
+		何为一组数据： key相同的为一组数据
+			输入： (hadoop,1)，(hadoop,1)，(hadoop,1)
+			输出：   (hadoop,3)
+
+			输入： (hello,1),(hello,1)
+			输出：   (hello,2)
+			
+			输入： (hi,1),(hi,1)
+			输出：  (hi,2)
+			
+			输入：(hive,1),(hive,1)
+			输出： （hive,2）
+			
+		ReduceTask2---->Reducer----->reduce(一次读入一组数据)
+			输入： (spark,1),(spark,1),(spark,1)
+			输出：   (spark,3)
+			
+			输入： (wow,1) ，(wow,1),(wow,1)
+			输出：   (wow,3)
+
+			输入：(zoo,1),(zoo,1)(zoo,1)
+			输出：   (zoo,3)
+			
+			
+	④调用OutPutFormat中的RecordWriter将Reducer输出的记录写出
+		ReduceTask1---->OutPutFormat（默认TextOutPutFormat）------>RecordWriter（LineRecoreWriter）
+		LineRecoreWriter将一个key-value以一行写出，key和alue之间使用\t分割
+		在输出目录中，生成文件part-r-0000
+			hadoop	3
+			hello	2
+			hi	2
+			hive	2
+		
+		ReduceTask2---->OutPutFormat（默认TextOutPutFormat）------>RecordWriter（LineRecoreWriter）
+		LineRecoreWriter将一个key-value以一行写出，key和alue之间使用\t分割
+		在输出目录中，生成文件part-r-0001
+			spark	3
+			wow	3
+			zoo	3
+		
+三、MR总结
+Map阶段(MapTask)：切片(Split)-----读取数据(Read)-------交给Mapper处理(Map)------分区和排序(sort)
+Reduce阶段(ReduceTask): 拷贝数据(copy)------排序(sort)-----合并(reduce)-----写出(write)
+
+
+
+	
+		
+
+
+
+			

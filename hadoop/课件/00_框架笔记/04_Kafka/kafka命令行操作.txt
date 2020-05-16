@@ -1,0 +1,30 @@
+(1)查看当前节点的所有topic
+	bin/kafka-topics.sh --zookeeper hadoop102:2181 --list
+
+(2)创建永久topic
+	bin/kafka-topics.sh --zookeeper hadoop102:2181 
+		--create --replication-factor 3 --partitions 1 --topic first // 一个分区三个副本
+
+(3)删除topic
+	bin/kafka-topics.sh --zookeeper hadoop102:2181 --delete --topic first
+	需要server.properties中设置delete.topic.enable=true否则只是标记删除
+	
+(4)生产消息
+	kafka]$ bin/kafka-console-producer.sh --broker-list hadoop102:9092 --topic first
+		>hello world
+		>atguigu  atguigu
+		
+(5)消费消息
+	bin/kafka-console-consumer.sh --zookeeper hadoop102:2181 --topic first
+	bin/kafka-console-consumer.sh --bootstrap-server hadoop102:9092 --topic first
+	bin/kafka-console-consumer.sh --bootstrap-server hadoop102:9092 
+		--from-beginning --topic first
+
+(6)查看某个Topic的详情
+	bin/kafka-topics.sh --zookeeper hadoop102:2181 --describe --topic first
+
+(7)修改分区数
+	bin/kafka-topics.sh --zookeeper hadoop102:2181 --alter --topic first --partitions 6
+	
+	
+	

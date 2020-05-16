@@ -1,0 +1,166 @@
+
+一、第二层采集通道的设计分析
+	1.目的
+		将已经存储在kafka集群中的数据，使用flume上传到HDFS!
+
+	2. 架构设计
+		课件上推荐的：
+		数据源在kafka，因此需要使用一个可以对接kafka的source，即kafkaSource
+		为了安全起见，选择filechannel
+		目的地在hdfs，使用hdfssink
+
+		自己尝试：
+		kafkaChannel+hdfssink【todo】
+
+	3. 组件分析
+		①kafkaSource：kafkaSource就是kafka的一个消费者线程，可以从指定的主题中读取数据！
+			如果希望提高消费的速率，可以配置多个kafkaSource，这些source组成同一个组！
+		
+		kafkaSource在工作时，会检查event的header中有没有timestamp属性，如果没有，
+		kafkaSource会自动为event添加timestamp=当前kafkaSource所在机器的时间！
+		
+		kafkaSource启动一个消费者，消费者在消费时，默认从分区的最后一个位置消费！
+
+		
+		必须的配置：
+			type=org.apache.flume.source.kafka.KafkaSource
+			kafka.bootstrap.servers=hadoop102:9092,hadoop103:9092,hadoop104:9092
+			kafka.topics=消费的主题
+			kafka.topics.regex=使用正则表达式匹配主题
+
+		可选的配置：
+			kafka.consumer.group.id=消费者所在的组id
+			batchSize=一次put多少数据，小于10000【默认】
+			batchDurationMillis=每次put间隔多少秒，控制consumer向channel放event的节奏
+			
+			useFlumeEventFormat=false(默认),如果配置了此参数，此参数需要和Kafkachannel的
+				ParseAsFlumeEvent的值设置为一致！
+
+			
+		和kafkaConsumer相关的属性：kafka.consumer=consumer的属性名
+			例如：kafka.consumer.auto.offset.reset
+
+		
+		
+	②fileChannel: channel中的event是存储在文件中！比memorychannel可靠，但是效率略低！
+	必须的配置：
+		type=file
+		
+		checkpointDir=checkpoint线程保存数据的目录！
+			(负责检查文件中哪些event已经被sink消费了，将这些event的文件删除)
+	
+		useDualCheckpoints=false 是否启动双检查点，如果启动后，会再启动一个备用的checkpoint线程！
+			如果改为true，还需要设置backupCheckpointDir(备用的checkpoint线程的工作目录)
+	
+		dataDirs=在哪些目录下保存event，默认为~/.flume/file-channel/data，
+			可以是逗号分割的多个目录！
+
+	可选配置：
+		keep-alive=3,代表channel允许一次put的操作时间，如果超过此时间，报错超时，
+			此时，这次put的数据就会全部回滚！
+			
+			
+	③hdfssink:  hdfssink将event写入到HDFS！
+					目前只支持生成两种类型的文件：text | sequenceFile,这两种文件都可以使用压缩！
+				
+				写入到HDFS的文件可以自动滚动（关闭当前正在写的文件，创建一个新文件）。
+					基于时间、events的数量、数据大小进行周期性的滚动！
+				
+				支持基于时间和采集数据的机器进行分桶和分区操作！
+				
+				HDFS数据所上传的目录或文件名可以包含一个格式化的转义序列，
+					这个路径或文件名会在上传event时，被自动替换，替换为完整的路径名！
+				
+				使用此Sink要求本机已经安装了hadoop，或持有hadoop的jar包！
+		
+	配置：	
+		必须配置：
+		type –	The component type name, needs to be hdfs
+		hdfs.path –	HDFS directory path (eg hdfs://namenode/flume/webdata/)
+
+		
+		
+	参考：
+		a1.sinks.k1.type = hdfs
+		
+		#一旦路径中含有基于时间的转义序列，要求event的header中必须有timestamp=时间戳，
+		#	如果没有,需要将useLocalTimeStamp = true
+		a1.sinks.k1.hdfs.path = hdfs://hadoop101:9000/flume/%Y%m%d/%H/%M
+		
+		#上传文件的前缀
+		a1.sinks.k1.hdfs.filePrefix=logs-
+
+		#以下三个和目录的滚动相关，目录一旦设置了时间转义序列，基于时间戳滚动
+		#是否将时间戳向下舍
+		a1.sinks.k1.hdfs.round = true
+		#多少时间单位创建一个新的文件夹
+		a1.sinks.k1.hdfs.roundValue=1
+		#重新定义时间单位
+		a1.sinks.k1.hdfs.roundUnit=minute
+
+		#是否使用本地时间戳
+		a1.sinks.k1.hdfs.useLocalTimeStamp = true
+		#积攒多少个Event才flush到HDFS一次
+		a1.sinks.k1.hdfs.batchSize = 100
+
+		#以下三个和文件的滚动相关，以下三个参数是或的关系！以下三个参数如果值为0都代表禁用！
+		#60秒滚动生成一个新的文件
+		a1.sinks.k1.hdfs.rollInterval = 60
+		#设置每个文件到128M时滚动
+		a1.sinks.k1.hdfs.rollSize = 134217700
+		#每写多少个event滚动一次
+		a1.sinks.k1.hdfs.rollCount = 0
+		#以不压缩的文本形式保存数据
+		a1.sinks.k1.hdfs.fileType=DataStream 
+		
+		
+			
+
+
+一、第二层采集通道的调试分析
+	kafkaSource------>FileChannel------>HDFSSink
+	
+	1.数据
+		①保证topic_start和topic_event主题中有数据
+		
+		②验证kafkaSource------>FileChannel是否有问题
+			查看消费者组是否有lag！
+			或运行test2.conf，使用loggersink看是否在控制台有数据的输出
+			
+			验证时，需要注意，每次消费了数据后，当前消费者组都会提交offset!
+			下次只会从之前的offset继续消费，因此，可以尝试重置offset
+		
+		③验证FileChannel------>HDFSSink是否有问题
+			遇到问题可以尝试讲日志级别设置 WARN，方便调试！
+			
+			
+	2.如何造其他日期的数据
+		数据的日期取决于kafkaSource所运行机器的时间！
+		
+		①先修改dt,让dt脚本也可以同步104的时间
+			如果要造 2019-1-1，2019-1-20,2019-2-11,2019-2-22的数据：
+		
+		②从以上时间中选取最小的时间2019-1-1，执行dt 2019-1-1，将所有的集群时间同步为
+				2019-1-1，启动集群(hdfs,kafka等)
+		③造日志
+				lg ------>/tmp/logs/app-2019-1-1.log
+				
+		④启动f1,f2		
+		
+		
+		2019-2-22 启动了kafka集群，此时集群会有一个时间戳2019-2-22 
+		此时修改时间为2019-1-22，如果没有重启kafka集群，此时，生产者在f1运行，
+		f1的时间为2019-1-22，而kafka集群的时间依然是2019-2-22,此时生成数据，就会生成超时！
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+
+
+

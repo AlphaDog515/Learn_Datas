@@ -1,0 +1,17 @@
+
+一、| 的作用
+	| 用来连接两个命令：precmd |  postcmd
+	| 将precmd产生的数据定向到标准输出，传给postcmd!
+	
+	要求：postcmd必须能否从标准输出中读取数据！
+	常见可以从标准输出读数据的命令：
+		cat,tail,head,less,xargs
+		kill -9 不可以
+		
+		ps -ef | grep f1.conf | grep -v grep | awk -F ' ' 'print $2'
+		ps -ef | grep f1.conf | grep -v grep | cut -d ' ' -f 5
+		
+		
+二、 xargs
+		xargs 可以读取标准输出中的数据，将这个数据作为参数传给后面的命令！
+		ps -ef  | grep f2.conf | grep -v grep | awk  '{print $2}' | xargs kill -9

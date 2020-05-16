@@ -1,0 +1,73 @@
+一、get_json_object
+	get_json_object(json_txt, path) - Extract a json object from path 	从json对象中抽取指定的内容
+	Extract json object from a json string based on json path specified, 
+	and return json string of the extracted json object. 
+	It will return null if the input json string is invalid.
+
+	需要指定要抽取的内容的path路径！
+	如果函数传入的数据不是JSON,此时会返回Null！
+
+	A limited version of JSONPath supported:
+		$   : Root object      代表整个JSON对象
+		.   : Child operator   代表获取JSON对象中子元素(属性)的操作符
+		[]  : Subscript operator for array 获取JSONArray中的某个元素
+  
+	{"name":"jack","age":18,"parents":[{"name":"oldjack","age":48},{"name":"jackmom","age":49}]}
+
+	获取18
+	select get_json_object('{"name":"jack","age":18,"parents":
+		[{"name":"oldjack","age":48},{"name":"jackmom","age":48}]}','$.age')
+
+	获取49
+	select get_json_object('{"name":"jack","age":18,"parents":
+		[{"name":"oldjack","age":48},{"name":"jackmom","age":49}]}','$.parents[1].age')
+
+		
+		
+二、解析事件数据
+
+	1581472611770|{"cm":{"ln":"-45.5","sv":"V2.7.9","os":"8.0.7","g":"2E0719R3@gmail.com","mid":"9","nw":"3G","l":"pt","vc":"13","hw":"640*1136","ar":"MX","uid":"9","t":"1581440366103","la":"24.4","md":"HTC-5","vn":"1.2.3","ba":"HTC","sr":"F"},"ap":"app","et":[{"ett":"1581376543852","en":"display","kv":{"goodsid":"3","action":"1","extend1":"1","place":"3","category":"78"}},{"ett":"1581440821593","en":"loading","kv":{"extend2":"","loading_time":"10","action":"3","extend1":"","type":"2","type1":"433","loading_way":"1"}},{"ett":"1581436003510","en":"ad","kv":{"entry":"3","show_style":"4","action":"3","detail":"325","source":"4","behavior":"1","content":"2","newstype":"1"}}]
+
+	编写UDF函数（1进1出），a
+		① 取ap属性的值app:			a(jsonstr,'ap')=app
+		② 取json的1581472611770：   a(jsonstr,'ts')=1581472611770
+		③ 取cm公共部分中的属性，例如：
+				取cm中的ln的值：  	a(jsonstr,'ln')=-45.5
+				取cm中的sv的值：  	a(jsonstr,'sv')=V2.7.9
+	
+	
+	编写UDTF函数（1进多出）,b,返回值为2列N行
+		b('[{},{}]')的返回值如下：
+			eventname,eventjson
+			display,{"ett":"1581376543852","en":"display","kv":{"goodsid":"3","action":"1","extend1":"1","place":"3","category":"78"}
+			loading,{"ett":"1581440821593","en":"loading","kv":{"extend2":"","loading_time":"10","action":"3","extend1":"","type":"2","type1":"433","loading_way":"1"}}
+			ad,{"ett":"1581436003510","en":"ad","kv":{"entry":"3","show_style":"4","action":"3","detail":"325","source":"4","behavior":"1","content":"2","newstype":"1"}}
+
+	create function base_analizer as 'com.atguigu.udf.MyUDF'
+	create function flat_analizer as 'com.atguigu.udtf.MyUDTF'	
+
+	
+三、测试自定义函数步骤
+	1. 在hive安装目录下创建auxlib目录
+	2. 上传自定义的不添加依赖的jar包到auxlib目录
+	3. 重新启动hive即可加载自定义jar包
+	4. 定义变量启动，将hivetest中的内容赋值给a,并切换数据库到gmall
+			hive -d a=$(cat hivetest)
+	5. 创建函数：
+			create function base_analizer as 'com.atguigu.udf.MyUDF'
+			create function flat_analizer as 'com.atguigu.udtf.MyUDTF'
+	6.测试函数：
+			select base_analizer('${a}','et')
+			
+
+	1581609610497|{"cm":{"ln":"-93.1"},"ap":"app","et":[{"ett":"1581519515784","en":"display","kv":{"goodsid":"0"}}]}
+
+	select base_analizer('1581609610497|{"cm":{"ln":"-93.1"},"ap":"app","et":[{"ett":"1581519515784","en":"display","kv":{"goodsid":"0"}}]}	','et')
+
+	select flat_analizer(base_analizer('1581609610497|{"cm":{"ln":"-93.1"},"ap":"app","et":[{"ett":"1581519515784","en":"display","kv":{"goodsid":"0"}}]}','et'),'et')
+
+
+
+
+
+

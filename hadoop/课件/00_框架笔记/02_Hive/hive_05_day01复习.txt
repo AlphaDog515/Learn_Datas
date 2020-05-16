@@ -1,0 +1,130 @@
+一、Hive
+
+1.简介
+		Hive是一个数据仓库软件。
+		Hive主要使用HQL（类sql）来分析已经存储在分布式设备(HDFS)上的数据！
+		Hive的本质是将用户编写的HQL，转换为MR程序，对数据进行分析！
+		Hive分析的数据必须是结构化的数据，在分析之前，用户需要对数据创建表结构！
+		Hive的表结构(shema)存储在关系型数据库中，数据是存储在HDFS上，二者通过表进行映射！
+		Hive基于OLAP设计，基于OLAP设计的软件，一般重分析，延时高！
+		
+2.安装
+①保证环境变量中有JAVA_HOME
+②基于HADOOP工作，保证环境变量中有HADOOP_HOME
+③在环境变量中配置HIVE_HOME，默认hive在启动时，会读取HIVE_HOME/conf中的配置文件
+
+3.配置
+①自定义hive的一些属性，需要在conf/hive-site.xml文件，配置自定义的属性
+		参数读取的顺序：   hadoop中的8个配置文件------>hive-default.xml------>hive-site.xml----->hive --hiveconf x=x
+		
+②修改hive输出日志的位置：修改conf/hive-log4j-properties文件
+
+4.元数据存储
+		hive默认将元数据存储在derby中！
+		derby数据库适合在一些Java开发的程序中作为内嵌的数据库！但是derby不支持多个实例同时访问一个库！
+		
+		将hive的元数据存储位置修改为存放在mysql中！
+		
+		注意： ①元数据存储的数据库的编码必须为latin1
+		       ②mysql的 binlog_format=mixed|row
+			   
+5.hive的交互参数
+		-d:   定义一个 变量名=变量值，在hivecli中可以使用  ${变量名}来读取变量值
+		-e:   执行一个引号引起来的sql语句，执行后返回结果，退出cli，用在脚本中！
+		-f:   执行一个sql文件，执行后返回结果，退出cli，用在脚本中！
+		-S：   静默模式，不输出和结果无关的多余信息
+		--hiveconf  属性名=属性值，在hivecli启动之前定义一个属性名
+		
+6.在hive中如何查看变量
+		set: 查看当前cli所有的变量
+		set 变量名： 查看某个指定变量的值
+		set 变量名=变量值： 修改某个变量的值
+		
+7.连接hive的方式
+①使用hivecli
+②可以使用JDBC方式连接hive
+		a)启动JDBC的服务端----hiveserver2
+		b)使用JDBC方式的客户端来访问
+					beeline  !connect 'jdbc:hive2://hiveserver2服务运行的主机名:10000'
+					使用其他JDBC客户端
+					
+8.hive中常用的命令
+	在hive中使用hdfs:    dfs  命令
+	在hive中使用shell命令：   ! shell命令
+	
+9.数据类型
+		在hive中最常用的数据类型就是String。
+		基本数据类型中，低精度的类型和高精度的类型进行计算时，hive会自动进行隐式转换，将低精度转为高精度！
+		boolean类型无法进行隐式转换
+		使用cast(值 as 类型)进行强制转换
+		
+		集合类型：
+				Array:  数组，使用下标定位数组中的元素
+				Map:   key-value，使用key获取value的值
+				Struct:  通过struct.属性名获取属性对应的值
+				
+10.数据的格式
+		hive只能分析结构化的数据！在使用hive之前，需要对数据进行ETL，转为结构化的数据！
+		在建表时，需要指定正确的分隔符，不然hive在读取每行数据时，无法将字段和数据进行映射！
+	
+11.hive的本质
+在hive中创建的表，库都在hdfs上有相应的路径！
+表中的数据，是文件的形式在表对应的目录中存放！
+在建表和建库后，会在Mysql中生成对应的shema信息！
+		tbls: 存放表的元数据
+		dbs:  库的元数据
+		column_v2: 列的元数据
+
+
+	
+二、库操作
+1.增
+		create database if not exists 库名
+		comment 库的注释
+		location  库的路径
+		with dbproperties(属性名=属性值,...)
+
+2.删
+		drop database 库名： 删除空库
+		drop database 库名 cascade： 删除非空库
+
+3.改
+		alter database 库名 set dbproperties(属性名=属性值,...)
+
+4.查
+		show databases: 查看所有库
+		show tables in 库名：  查看库中的表
+		desc database 库名：查看某个库的描述
+		desc database extended 库名：查看某个库的详细描述
+		
+三、表操作
+1. 创建
+		create [external] table  if not exists 表名
+		(列名 列类型 comment 列注释,...)
+		comment 表的注释
+		.....
+		row format ... //表中每行数据的格式
+		store as  xxxx  //表中数据的存储格式
+		location  //表的路径
+		
+	创建表，带external，这个表是外部表，不带是管理表(内部表)
+	
+	外部表在删除表时，只删除mysql中的元数据！
+	管理表在删除表时，删除mysql中的元数据和在hdfs表目录中的数据！
+	
+	表是廉价的，数据是珍贵的，一般都建议外部表！
+	
+	外部表：  alter table 表名 set tblproperties('EXTERNAL'='TRUE')
+	内部表：  alter table 表名 set tblproperties('EXTERNAL'='FALSE')
+
+
+
+
+
+
+
+
+
+
+
+		

@@ -1,0 +1,43 @@
+Linux系统修改防火墙配置
+ 
+
+修改Linux系统防火墙配置需要修改 /etc/sysconfig/iptables 这个文件
+vim /etc/sysconfig/iptables
+在vim编辑器，会看到下面的内容
+
+
+# Firewall configuration written by system-config-firewall
+# Manual customization of this file is not recommended.
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -p icmp -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT
+-A INPUT -m state --state NEW -m tcp -p tcp --dport 8080 -j ACCEPT
+-A INPUT -m state --state NEW -m tcp -p tcp --dport 3306 -j ACCEPT
+-A INPUT -m state --state NEW -m tcp -p tcp --dport 2181 -j ACCEPT
+-A INPUT -j REJECT --reject-with icmp-host-prohibited
+-A FORWARD -j REJECT --reject-with icmp-host-prohibited
+COMMIT
+
+
+
+需要开放端口，请在里面添加一条以下内容即可:
+
+-A RH-Firewall-1-INPUT -m state --state NEW -m tcp -p tcp --dport 1521 -j ACCEPT
+
+其中 1521 是要开放的端口号，然后重新启动linux的防火墙服务。
+
+Linux下停止/启动防火墙服务的命令(root用户使用)：
+#永久性生效，重启后不会复原
+chkconfig iptables on     #开启
+chkconfig iptables off    #关闭
+
+#即时生效，重启后复原
+service iptables start    #开启
+service iptables stop     #关闭
+
+ 

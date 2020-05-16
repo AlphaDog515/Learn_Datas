@@ -1,0 +1,17 @@
+/etc/profile                     				环境变量的配置文件
+/etc/sysconfig/network           				主机名配置文件
+/etc/sysconfig/iptables          				防火墙配置文件
+/etc/hosts                       				主机映射文件
+C:\Windows\System32\drivers\etc  				windows映射文件
+/etc/init.d                      				系统服务的目录
+
+/etc/udev/rules.d/70-persistent-net.rules 		修改克隆虚拟机IP
+/etc/sysconfig/network-scripts/ifcfg-eth0 		修改IP地址
+/etc/passwd                      				查看创建的用户
+/etc/sudoers                     				设置普通用户具有root权限
+/etc/group                       				查看创建了哪些组
+/etc/fstab                       				设置开机自动挂载文件
+
+/etc/my.cnf										mysql的主配置文件
+/var/lib/mysql									mysql数据库的数据库文件
+/var/log/mysql									数据库日志输出存放位置

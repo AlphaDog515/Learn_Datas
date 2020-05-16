@@ -1,0 +1,151 @@
+一、拉链表
+1.为什么要做拉链表
+	拉链表适用于同步新增和变化的数据！
+	对于周期型事实表，采用同步新增和变化的方式！
+		
+	以同步order_info为例
+	
+	以下为Mysql中数据的记录形式：【MySQL里面存储的是更新，会将旧的状态修改，历史数据不会显示】
+	2020-02-23
+	id	status	create_time operate_time
+	1	已支付	2020-02-23	2020-02-23
+	2	已支付	2020-02-23	2020-02-23
+
+	2020-02-24
+	id	status	create_time operate_time
+	1	已发货	2020-02-23	2020-02-24
+	2	已发货	2020-02-23	2020-02-24
+	3	已支付	2020-02-24	2020-02-24
+
+	--------------------------------------------------------
+	hive中，同步新增和变化
+	如果表是一个分区表.
+	2020-02-23同步结果如下：
+	id	status	create_time operate_time  dt
+	1	已支付	2020-02-23	2020-02-23	2020-02-23
+	2	已支付	2020-02-23	2020-02-23	2020-02-23
+
+	2020-02-24同步结果如下：
+	id	status	create_time operate_time  dt
+	1	已支付	2020-02-23	2020-02-23	2020-02-23
+	2	已支付	2020-02-23	2020-02-23	2020-02-23
+
+	1	已发货	2020-02-23	2020-02-24	2020-02-24
+	2	已发货	2020-02-23	2020-02-24	2020-02-24
+	3	已支付	2020-02-24	2020-02-24	2020-02-24
+
+	如果不采用拉链表，存在在一张hive的表中，有同一条信息的多条不同时期的状态！
+	比较凌乱，而且很难分别不同的记录之间的顺序关系！
+
+	可以采用拉链表，拉(拉取原始数据)链(以链条的形式)表，展示同一条信息，
+	在不同日期的状态，以及同一条信息的随着时间状态的演变顺序！
+
+	以下是拉链表的格式：
+	id	status		create_time 	operate_time 	start_time  	end_time
+	1	已支付		2020-02-23		2020-02-23		2020-02-23		2020-02-23
+	1	已发货		2020-02-23		2020-02-24		2020-02-24		9999-99-99
+	2	已支付		2020-02-23		2020-02-23		2020-02-23		2020-02-23
+	2	已发货		2020-02-23		2020-02-24		2020-02-24		9999-99-99
+	3	已支付		2020-02-24		2020-02-24		2020-02-24		9999-99-99
+
+
+2.查询拉链表中的某天的历史切片
+	举例查询2020-02-24日在拉链表中的历史切片数据，
+	代表要查询2020-02-24之前插入的，当前在表中状态是最新的数据！
+
+
+
+
+二、体会拉链表的制作
+	1.在mysql中生成第一天的数据
+		①为了效果，先清空表：TRUNCATE `order_info`
+		②向订单表插入10条数据：CALL `insert_order`('2020-02-24',10,100,100);
+	
+	2.将第一天的数据上传到hdfs
+		sqoop_import.sh  order_info 2020-02-24
+		
+	
+	3.将数据导入ods层
+		ods_db.sh 2020-02-24
+	
+	4.创建拉链表，对比之前的dwd_order_info，多了start_date和end_date两个字段
+		create external table dwd_order_info_his(
+			`id` 			string 			COMMENT '订单编号',
+			`total_amount` 	decimal(10,2) 	COMMENT '订单金额',
+			`order_status` 	string 			COMMENT '订单状态',
+			`user_id` 		string 			COMMENT '用户id' ,
+			`payment_way` 	string 			COMMENT '支付方式',
+			`out_trade_no` 	string 			COMMENT '支付流水号',
+			`create_time` 	string 			COMMENT '创建时间',
+			`operate_time` 	string 			COMMENT '操作时间',
+			
+			`start_date`  	string 			COMMENT '有效开始日期',
+			`end_date`  	string 			COMMENT '有效结束日期'
+		) COMMENT '订单拉链表'
+		stored as parquet
+		location '/warehouse/gmall/dwd/dwd_order_info_his/'
+		tblproperties ("parquet.compression"="snappy");
+	
+	
+	5. 将数据首次导入到拉链表
+		insert overwrite TABLE dwd_order_info_his
+		SELECT *,
+		'9999-99-99'
+		FROM gmall.ods_order_info
+		where dt='2020-02-24';
+
+
+	6.随机在2020-02-25日插入若干数据，修改2020-02-24的若干数据
+	
+	7.同步新增和变化的数据到hdfs
+		sqoop_import.sh order_info 2020-02-25
+		将创建时间或者是操作时间是2020-02-25的数据加载到hdfs中！
+	
+	8.将新增和变化的数据加载到ods层：数据加载到ods_order_info表中！
+		ods_db.sh 2020-02-25
+	
+	9.创建临时表，结构和目标拉链表一致
+		create table 临时表名 like 拉链表
+		create table dwd_order_info_his_tmp like dwd_order_info_his;
+	
+	9.混合数据，先插入到临时表，再从临时表查询，覆盖写到拉链表
+		a)将拉链表中的所有数据查询出，如果历史数据没有发生变化，不需要修改
+			如果历史数据，和今日新增和变化的数据的id一致，此时需要把历史数据中的
+			end_date从9999-99-99改为当前同步数据的日期-1
+		
+		b)将今日的新增和变化数据直接插入到临时表		
+
+		假如历史表有多条2号的记录：
+			原始表														新增和变化有两条数据(2,4)
+		id	status	create_time operate_time  start_time  end_time      
+		1	已支付	2020-02-23	2020-02-23	2020-02-23	2020-02-23
+		1	已发货	2020-02-23	2020-02-24	2020-02-24	9999-99-99
+		2	已支付	2020-02-23	2020-02-23	2020-02-23	2020-02-23		xxx【不需要修改了】
+		2	已发货	2020-02-23	2020-02-24	2020-02-24	9999-99-99		xxx
+		3	已支付	2020-02-24	2020-02-24	2020-02-24	9999-99-99
+
+		insert overwrite TABLE dwd_order_info_his_tmp
+		SELECT *,'9999-99-99' FROM gmall.ods_order_info where dt='2020-02-25'  // 新增和变化的数据
+		union all
+		SELECT oi.id, total_amount, order_status, user_id, payment_way, 
+			out_trade_no, create_time, operate_time, start_date, 
+			if(t.id is null,end_date,date_sub(dt,1)) end_date
+		FROM gmall.dwd_order_info_his oi 										// 原表所有的
+		left join (select id,dt from ods_order_info where dt='2020-02-25') t
+			on oi.id=t.id and oi.end_date='9999-99-99';
+		// 这里oi.end_date='9999-99-99'不是过滤字段是关联字段，left join左边的数据都在，因此之前封闭的数据还会有
+	
+	10.将临时表的数据插入到新表
+		insert overwrite TABLE dwd_order_info_his
+		select * from dwd_order_info_his_tmp order by id
+
+
+
+
+
+
+
+
+
+
+

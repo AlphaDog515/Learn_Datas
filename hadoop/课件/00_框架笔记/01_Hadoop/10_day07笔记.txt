@@ -1,0 +1,136 @@
+一、自定义输入格式
+1. 自定义类，继承FileInputFormat
+
+2. 提供RecordReader
+	①initliaze(InputSplit split，TaskXXXContext context) : 会在读取切片数据之前提前被框架调用
+		InputSplit split: 当前读取的切片
+		TaskXXXContext context: 当前Job的上下文，可以通过context获取Job的配置对象！
+			
+	②boolean nextKeyValue()
+		负责从切片中读取一对key-value，读取到之后，返回true,否则返回false
+			
+		被Mapper的run()
+			run(){
+				setUp();
+				while(rr.nextKeyValue()){
+					map(rr.currentKey(),rr.currentValue(),context);				
+				}
+			}
+			
+3.  设置使用自定义的输入格式
+	Job.setInputFormatClass();
+		
+		
+		
+二、SequenceFile
+	1.SequenceFile是Hadoop提供的一种文件格式
+		相比纯文本文件，格式紧凑！保存的是key-value键值对！
+			
+	2.在Job中将Reducer输出的key-value保存到SequenceFile中
+		可以使用SequenceFileOutPutFormat
+			
+	3.在Job中读取的数据存在SequenceFile中，可以使用SequenceFileInputFormat
+
+	
+	
+三、MapTask的shuffle过程
+	1. 阶段定义
+		MapTask:   map--------sort
+		map:   	Mapper.map()中将输出的key-value写出之前
+		sort: 	Mapper.map()中将输出的key-value写出之后
+		
+	2. sort
+		①当在map()将输出的key-value写出后，记录是会被Partitioner计算一个分区号
+		②计算后，记录被收集到一个缓冲区(MapOutPutBuffer)
+		③收集线程负责向缓冲区收集数据，缓冲区初始值为100M，当使用到80%阈值，
+			唤醒溢写线程，溢写线程会将缓冲区已经收集的数据溢写到磁盘
+			
+		④在溢写前，会对缓冲区中的数据进行排序(快速排序)，在排序时，只通过比较key进行排序
+		
+		⑤排序后，按照分区，依次将数据写入到磁盘的临时文件的若干分区中
+		
+		⑥每次溢写都会生成一个临时文件，当所有的数据都溢写完成之后，
+			会将所有的临时文件片段合并为一个总的最终的文件
+			
+		⑦在合并时，将所有的临时文件的相同分区的数据，进行合并，
+			合并后再对所有的数据进行排序(归并排序)
+			
+		⑧最终生成一个结果文件，这个文件分为若干分区，
+			每个分区的数据已经按照key进行了排序，等待reduceTask的shuffle线程来拷贝数据！
+
+
+
+
+举例：
+	orderid		pid		acount
+	10000001	Pdt_01	222.8
+	10000002	Pdt_06	722.4
+	10000001	Pdt_02	222.8
+	10000001	Pdt_05	25.8
+	10000003	Pdt_01	232.8
+	10000003	Pdt_01	33.8
+	10000002	Pdt_04	122.4
+	10000002	Pdt_03	522.8
+
+	统计同一笔订单中，金额最大的商品记录输出
+	分析得出： 在同一笔订单中，对每条记录的金额进行降序排序，最大的排前边
+	
+	①orderid和acount属性都必须作为key
+	②针对key，提供compareTo()，先按照orderid排序(升降序都可以)，再按照acount(降序)排序
+
+Mapper
+	keyin-valuein
+	map()
+	keyout-valueout
+
+	shuffle之后的数据：
+	10000001	Pdt_02	222.8
+	10000001	Pdt_01	222.8
+	10000001	Pdt_05	25.8
+
+	10000002	Pdt_06	722.4
+	10000002	Pdt_03	522.8
+	10000002	Pdt_04	122.4
+
+	10000003	Pdt_01	232.8
+	10000003	Pdt_01	33.8
+
+	进入Reduce
+	获取分组比较器，如果没设置默认使用MapTask排序时key的比较器！
+		默认的比较器比较策略不符合要求，它会将orderId一样且acount一样的记录才认为是一组的！
+		
+	自定义分组比较器，只按照orderId进行对比，只要OrderId一样，
+	认为key相等，这样可以将orderId相同的分到一个组！
+	在组内去第一个最大的即可！
+
+
+Reducer
+	keyin-valuein
+	reduce()
+	keyout-valueout
+
+
+
+	统计以下数据的平均工资
+	MapTask1      
+	输出的key-value               Reducer
+	(jack,2000)               7000/5=1400
+	(tom,1500)
+	(marry,1000)
+
+
+	MapTask2
+	(tom,1500)
+	(marry,1000)
+
+	使用Combiner统计以下数据的平均工资
+	MapTask1      
+	输出的key-value               combiner                      Reducer
+	(jack,2000)                  
+	(tom,1500)                   （salary,1500）              2750/2=1375
+	(marry,1000)
+
+
+	MapTask2                    combiner
+	(tom,1500)                  （salary,1250）
+	(marry,1000)

@@ -1,0 +1,18 @@
+#!/bin/bash
+#只接收start和stop参数
+if(($#!=1))
+then
+	echo 请输入start或stop!
+	exit;
+fi
+
+if [ $1 = start ]
+then
+	xcall kafka-server-start.sh -daemon $KAFKA_HOME/config/server.properties
+	
+elif [ $1 = stop ]
+	then xcall kafka-server-stop.sh
+
+else
+	echo 请输入start或stop!
+fi

@@ -1,0 +1,101 @@
+// 事件日志
+1581609622106 | {
+	"cm": {
+		"ln": "-74.5",
+		"sv": "V2.4.9",
+		"os": "8.1.0",
+		"g": "803C134S@gmail.com",
+		"mid": "991",
+		"nw": "3G",
+		"l": "es",
+		"vc": "10",
+		"hw": "640*1136",
+		"ar": "MX",
+		"uid": "991",
+		"t": "1581580288194",
+		"la": "-35.2",
+		"md": "Huawei-8",
+		"vn": "1.1.6",
+		"ba": "Huawei",
+		"sr": "S"
+	},
+	"ap": "app",
+	"et": [{
+		"ett": "1581536527909",
+		"en": "newsdetail",
+		"kv": {
+			"entry": "2",
+			"goodsid": "259",
+			"news_staytime": "42",
+			"loading_time": "28",
+			"action": "2",
+			"showtype": "5",
+			"category": "31",
+			"type1": ""
+		}
+	}, {
+		"ett": "1581558448104",
+		"en": "ad",
+		"kv": {
+			"entry": "2",
+			"show_style": "1",
+			"action": "4",
+			"detail": "",
+			"source": "1",
+			"behavior": "1",
+			"content": "1",
+			"newstype": "9"
+		}
+	}, {
+		"ett": "1581521576232",
+		"en": "notification",
+		"kv": {
+			"ap_time": "1581606006750",
+			"action": "1",
+			"type": "2",
+			"content": ""
+		}
+	}, {
+		"ett": "1581547648905",
+		"en": "active_background",
+		"kv": {
+			"active_source": "3"
+		}
+	}, {
+		"ett": "1581521789533",
+		"en": "error",
+		"kv": {
+			"errorDetail": "java.lang.NullPointerException\\n    at cn.lift.appIn.web.AbstractBaseController.validInbound(AbstractBaseController.java:72)\\n at cn.lift.dfdf.web.AbstractBaseController.validInbound",
+			"errorBrief": "at cn.lift.appIn.control.CommandUtil.getInfo(CommandUtil.java:67)"
+		}
+	}]
+}
+
+
+// 启动日志
+{
+	"action": "1",
+	"ar": "MX",
+	"ba": "Sumsung",
+	"detail": "102",
+	"en": "start",
+	"entry": "5",
+	"extend1": "",
+	"g": "90D8J8R8@gmail.com",
+	"hw": "640*960",
+	"l": "pt",
+	"la": "-7.8",
+	"ln": "-92.0",
+	"loading_time": "4",
+	"md": "sumsung-18",
+	"mid": "999",
+	"nw": "3G",
+	"open_ad_type": "2",
+	"os": "8.2.4",
+	"sr": "R",
+	"sv": "V2.2.1",
+	"t": "1581569722387",
+	"uid": "999",
+	"vc": "19",
+	"vn": "1.0.0"
+}

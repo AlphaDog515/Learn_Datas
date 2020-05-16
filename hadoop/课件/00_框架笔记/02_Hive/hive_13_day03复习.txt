@@ -1,0 +1,87 @@
+一、函数
+
+1.nvl :  
+			nvl(值1,defaultValue): 当值1是null是返回defaultValue，否则返回值1
+			
+2.concat:
+			concat(str1,str2,...): 返回多个字符串拼接后的结果！一旦其中的一个字符串为null，返回Null
+			
+3.concat_ws:
+			concat_ws(分隔符，str|array<string>...): 返回使用分隔符拼接多个字符串的结果！
+			
+4.collect_set:
+	UDAF函数
+			collect_set(列)： 返回将这列的多行值转换的集合，去重！
+			collect_list(列)： 返回将这列的多行值转换的集合，不去重！
+			
+5.explode：
+	UDTF函数
+			explode(列)： 将此列的每一行炸裂为多行！
+						  参数只能为map或array!
+						  将array参数炸裂为一列多行，将map参数炸裂为2列多行！
+			
+			explode函数只能在select子句中单独使用！如果希望和其他的列一起查询，使用lateral view 对炸裂的结果进行侧写
+			
+			语法： select   a列，临时列名
+					from 表名 lateral view explode(列) 临时表名 as  临时列名
+					
+6.行转列： 一列多行  转 一列一行。collect_set，collect_list
+
+7.列转行： 一列一行 转 一列多行，explode
+
+二、窗口函数
+
+1.简介
+			窗口函数：   函数+  窗口
+			
+			函数：  要运行的函数，不是所有的函数都支持定义窗口！
+					只有以下函数支持使用窗口函数！
+					
+				①特殊的窗口函数
+					LEAD:    LEAD(列名，offset,默认值)： 获取当前行之后offset行，指定列的值，如果没有使用默认值！
+					
+					LAG:      LAG(列名，offset,默认值)： 获取当前行之前offset行，指定列的值，如果没有使用默认值！
+					
+					FIRST_VALUE:  FIRST_VALUE(列名，true|false（默认）) ： 获取窗口中指定列第一行的值，第二个参数如果为
+								true代表忽略null值！
+					LAST_VALUE:LAST_VALUE(列名，true|false（默认）) ： 获取窗口中指定列最后一行的值，第二个参数如果为
+								true代表                                 忽略null值！
+					
+				②常用的聚集函数：
+					min，max，avg，count，sum
+				③排名函数
+						排名函数在使用时，通常需要先对数据进行排序！
+					rank:     允许并列，一旦出现并列，跳号！
+					dense_rank: 允许并列，一旦出现并列，不跳号！
+					row_number:  返回连续的行号，每个行号之间相差1
+					cume_dist:   返回当前结果集及之前的数据 占 总数据集的比例
+					percent_rank:  rank-1 / 总数据量-1
+					ntile: 将数据集平均分散到多个组中，返回当前记录的组号
+					
+			格式：  函数  over( partition by 字段,字段  order by 字段 asc|desc  window_clause )
+			
+			window_clause格式：
+					row | range   between  起始范围    and  终止范围
+					
+			注意： ①如果窗口函数在over()中，既没有定义window_clause，也没有出现order by，此时窗口默认为
+						row   between  unbounded preceding     and  unbounded  following
+						
+					②如果窗口函数在over()中，既没有定义window_clause，有order by，此时窗口默认为
+						row   between  unbounded preceding     and  current row
+						
+					③以下函数可以跟over()但是不能定义window_clause
+							排名函数和LEAD、LAG
+							
+			窗口函数中的partition by和group by的区别：
+				①如果使用group by，此时select后只能写group by后的字段和聚集函数中的字段
+				②如果使用group by，可以执行去重，而partition by不去重
+				③窗口函数是对窗口内的每条记录都使用函数计算一次
+
+
+
+
+
+
+
+
+

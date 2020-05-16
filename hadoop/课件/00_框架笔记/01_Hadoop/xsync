@@ -1,0 +1,21 @@
+#!/bin/bash
+# 调用方式 xsyc后面接路径名
+#校验参数是否合法
+if(($#==0))
+then
+	echo 请输入要分发的文件!
+	exit;
+fi
+
+#获取分发文件的绝对路径
+dirpath=$(cd `dirname $1`; pwd -P)
+filename=`basename $1`
+
+echo 要分发的文件的路径是:$dirpath/$filename
+
+#循环执行rsync分发文件到集群的每条机器
+for((i=102;i<=104;i++))
+do
+	echo ---------------------hadoop$i---------------------
+	rsync -rvlt $dirpath/$filename  atguigu@hadoop$i:$dirpath
+done

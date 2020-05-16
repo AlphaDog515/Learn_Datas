@@ -1,0 +1,135 @@
+一、Hive的介绍
+1. Hive是一个数据仓库软件
+		Hive可以使用SQL来促进对已经存在在分布式设备中的数据进行读，写和管理等操作！
+		Hive在使用时，需要对已经存储的数据进行结构的投影(映射)
+		Hive提供了一个命令行和JDBC的方式，让用户可以连接到hive！
+		
+		注意：Hive只能分析结构化的数据！
+			  Hive在Hadoop之上，使用hive的前提是先要安装Hadoop
+			  
+			  
+2. Hive的特点
+		①Hive并不是一个关系型数据库
+		②不是基于OLTP(在线事务处理)设计
+				OLTP设计的软件： 
+						侧重点在事务的处理，和在线访问。一般RDMS都是基于OLTP设计
+		③Hive无法做到实时查询，不支持行级别更新(update,delete)
+		
+		④Hive要分析的数据存储在HDFS，hive为数据创建的表结构(schema)，存储在RDMS
+		⑤Hive基于OLAP(在线分析处理)设计
+				OLAP设计的软件：
+						侧重点在数据的分析上，不追求分析的效率！
+		⑥Hive使用类SQL，称为HQL对数据进行分析
+		⑦Hive容易使用，可扩展，有弹性
+		
+3. WordCount
+		如何用hive实现wordcount?
+源文件：
+hadoop	hive	hadoop
+hadoop	hive
+...
+
+将源文件转为结构化的数据
+hadoop	1
+hive	1
+hadoop	1
+...
+
+①建表
+		表需要根据存储的数据的结构创建！
+		表要映射到数据的结构上
+		create table a(word string,totalCount int) 
+	
+②写HQL： 
+		select  word,sum(totalCount)
+		from a 
+		group by word
+		
+
+4. Hive的安装
+①保证有JAVA_HOME,HADOOP_HOME
+②将bin配置到PATH中，在环境变量中提供HIVE_HOME
+
+		
+二、Hive数据的存储
+
+1.Hive要分析的数据是存储在HDFS上
+			hive中的库的位置，在hdfs上就是一个目录！
+			hive中的表的位置，在hdfs上也是一个目录，在所在的库目录下创建了一个子目录！
+			hive中的数据，是存在在表目录中的文件！
+			
+2. 在hive中，存储的数据必须是结构化的数据，而且
+	这个数据的格式要和表的属性紧密相关！
+	表在创建时，有分隔符属性，这个分隔符属性，代表在执行MR程序时，使用哪个分隔符去分割每行中的字段！
+		
+		hive中默认字段的分隔符： ctrl+A, 进入编辑模式，ctrl+V 再ctrl+A
+		
+3. hive中的元数据(schema)存储在关系型数据库
+		默认存储在derby中！
+		
+		derby是使用Java语言编写的一个微型，常用于内嵌在Java中的数据库！
+		derby同一个数据库的实例文件不支持多个客户端同时访问！
+		
+4. 将hive的元数据的存储设置存储在Mysql中！
+		Mysql支持多用户同时访问一个库的信息！
+		
+		注意事项： ①metastore库的字符集必须是latin1
+				   ②5.5mysql，改 binlog_format=mixed | row
+								默认为statement
+			mysql的配置文件： /etc/my.cnf
+		
+①安装MySQL
+		卸载时： 使用rpm -e卸载后，需要删除 /var/lib/mysql目录！
+		检查：
+		
+
+5. 元数据的结构
+		表的信息都存储在tbls表中，通过db_id和dbs表中的库进行外键约束！
+		库的信息都存储在dbs表中！
+		字段信息存在在column_v2表中，通过CD_ID和表的主键进行外键约束！
+		
+		
+6. hive常用的交互参数
+
+	usage: hive
+	-d,--define <key=value>  Variable subsitution to apply to hive
+                                  commands. e.g. -d A=B or --define A=B
+				 定义一个变量，在hive启动后，可以使用${变量名}引用变量	  
+							
+    --database <databasename>     Specify the database to use
+				 指定使用哪个库
+ 
+	-e <quoted-query-string>  SQL from command line
+				 指定命令行获取的一条引号引起来的sql，执行完返回结果后退出cli!
+				
+	-f <filename>   SQL from files
+				 执行一个文件中的sql语句！执行完返回结果后退出cli!
+				
+	-H,--help  Print help information
+    --hiveconf <property=value>   Use value for given property
+			在cli运行之前，定义一对属性！
+			
+	hive在运行时，先读取 hadoop的全部8个配置文件，读取之后，再读取hive-default.xml
+	再读取hive-site.xml，如果使用--hiveconf，可以定义一组属性，
+	这个属性会覆盖之前读到的参数的值！
+	
+	
+    --hivevar <key=value>   Variable subsitution to apply to hive commands. e.g. --hivevar A=B
+				作用和-d是一致的！
+ 
+	-i <filename>  Initialization SQL file
+				先初始化一个sql文件，之后不退出cli
+ 
+	-S,--silent  Silent mode in interactive shell 不打印和结果无关的信息
+
+	-v,--verbose    Verbose mode (echo executed SQL to the console)
+
+		
+		
+		
+		
+		
+		
+		
+		
+		

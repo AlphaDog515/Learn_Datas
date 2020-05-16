@@ -1,0 +1,76 @@
+#!/bin/bash
+#输入start和stop参数，一键启动或关闭hadoop,zk,kafka集群，启动f1,f2采集通道
+if(($#!=1))
+then 
+	echo 请输入start或stop!
+	exit;
+fi
+
+#编写函数，这个函数的功能为返回集群中启动成功的broker的数量
+function countKafkaBrokders()
+{
+	count=0
+	for((i=102;i<=104;i++))
+	do
+		result=$(ssh hadoop$i "jps | grep Kafka | wc -l")
+		count=$[$result+$count]
+	done
+
+	#函数可以定义返回值，如果不定义，返回函数最后一条命令的执行状态(返回0，代表成功，非0，即为异常)
+	return $count
+}
+
+#启动,注意启动时，各个组件的依赖关系，例如zk必须先于kafka启动，后于kafka关闭
+if [ $1 = start ]
+then
+	zk start
+	hd start
+	kf start
+	
+	#保证kafka集群已经启动时，才能启动f1,f2,判断当前kafka集群启动了多少 broker实例
+	while [ 1 ]
+	do
+		countKafkaBrokders
+		#如果返回值不为3，有可能是机器还尚未执行broker的启动命令，因此继续判断
+        if(($?==3))
+		then
+			break
+		fi
+		sleep 2s
+	done
+	
+	f1 start
+	f2 start
+	
+	#查看启动了哪些进程
+	xcall jps
+elif [ $1 = stop ]
+then
+	f1 stop
+	f2 stop
+	kf stop
+	
+	#在kafka没有停止完成之前，不能停止zk集群
+	while [ 1 ]
+		do
+			countKafkaBrokders
+			#如果返回值不为0,kafka集群没有停止完成
+			if(($?==0))
+			then
+				break
+			fi
+			sleep 2s
+		done
+
+	zk stop
+	hd stop
+	
+	#查看还剩了哪些进程
+	xcall jps		
+else
+	echo 请输入start或stop!
+fi
+
+
+
+	

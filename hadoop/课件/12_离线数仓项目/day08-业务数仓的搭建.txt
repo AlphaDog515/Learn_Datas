@@ -1,0 +1,100 @@
+业务数仓的搭建：
+
+一、Sqoop的安装
+	1.Sqoop要和hive安装在同一台机器！
+		import: 将mysql中的数据，导入到hdfs,再由hdfs导入到hive
+					不需要将sqoop安装在hive所在的集群，只需要安装在hadoop所在机器即可！
+					
+		export: ODS---＞DWD--->DWS--->ADS---->导出到mysql
+					sqoop需要和hive安装在同一台机器！
+
+	2.验证：				
+		sqoop list-databases --connect jdbc:mysql://192.168.6.100:3306/ 
+			--username root --password 123456
+
+	
+	
+二、造数据
+	1.在导入第三个创建函数的脚本之前，需要调高函数创建的安全级别
+		SHOW VARIABLES LIKE '%log_bin_trust_function_creators%';
+
+		SET GLOBAL log_bin_trust_function_creators=1
+
+	2.导入数据，调用存储过程
+		CALL init_data('2019-02-16',1000,200,300,TRUE);
+
+
+
+三、在导入和导出数据时，如果源数据库有字段为NULL值，那么导入和导出后，如何也使用NULL
+	目前：  mysql--operate_time--NULL  导入到  hdfs时， hdfs----operate_time----'null'
+	希望：  mysql--operate_time--NULL  导入到  hdfs时， hdfs----operate_time----NULL
+
+	需要在sqoop导入和导出的命令中添加额外的参数！
+
+	① 默认sqoop到import数据时，将Mysql的Null类型，转为'null'
+	
+	② hive中使用\N代表NULL类型
+	
+	③ 如果希望在import时，将Mysql的Null类型，转为自己期望的类型，'\\N'
+		需要使用：--null-string and --null-non-string 
+		
+		--null-string：   当mysql的string类型列为null时，导入到hive时，使用什么来代替！
+		--null-string a:  如果mysql中，当前列是字符串类型(varchar,char)，假如这列值为NULL，
+							导入到hive时，使用a来代替！
+		
+		--null-non-string：  当mysql的非string类型列为null时，导入到hive时，使用什么来代替！
+		--null-non-string b: 如果mysql中，当前列不是字符串类型(varchar,char)，假如这列值为NULL，
+								导入到hive时，使用b来代替！
+	
+	④如果到导出时，希望将指定的参数，导出为mysql的NULL类型，需要使用：
+		--input-null-string and --input-null-non-string 
+		
+		--input-null-string a： 
+			在hive导出到mysql时，如果hive中string类型的列的值为a,导出到mysql中，使用NULL代替！
+		
+		--input-null-non-string b: 
+			在hive导出到mysql时，如果hive中非string类型的列的值为b,导出到mysql中，使用NULL代替！
+			
+			
+			
+			
+四、表的说明
+ods层
+	ods_order_info					订单表		
+	ods_order_detail 				订单详情表	
+	ods_sku_info					商品表		
+	ods_user_info 					用户表		
+	ods_base_category1 				商品一级分类表	
+	ods_base_category2 				商品二级分类表	
+	ods_base_category3 				商品三级分类表	
+	ods_payment_info 				支付流水表
+			
+			
+DWD层			
+	dwd_order_info					订单表
+	dwd_order_detail				订单详情表
+	dwd_user_info					用户表
+	dwd_payment_info				支付流水表
+	dwd_sku_info					商品表
+
+
+	
+DWS层
+	dws_user_action					用户行为宽表
+	dws_sale_detail_daycount		购买商品明细表
+	dws_pay_user_detail				新付费用户表
+	
+	
+	
+ADS层
+	ads_gmv_sum_day 				GMV成交总额表
+	ads_user_convert_day			用户新鲜度表
+	ads_user_action_convert_day		用户行为漏斗分析表
+	ads_sale_tm_category1_stat_mn	品牌复购率表
+	ads_ul_rep_ratio				各用户等级对应的复购率前十的商品表
+	ads_pay_user_count				新付费用户数量表
+	ads_pay_user_ratio				付费用户率表
+	ads_user_last_pay				每个用户最近一次购买表
+	ads_goods_order_count_day		商品每日销量排行Top10表
+	ads_order2pay_mn				每个月订单付款率表
+		

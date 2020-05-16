@@ -1,0 +1,129 @@
+	
+	select 地区,sum(订单金额) from xxx group by 地区
+	select 品类,sum(订单金额) from xxx group by 品类
+	select 时间,sum(订单金额) from xxx group by 时间
+	select 地区,品类，sum(订单金额) from xxx group by 地区，品类
+	select 时间,品类，sum(订单金额) from xxx group by 时间，品类
+	select 时间,地区，sum(订单金额) from xxx group by 时间，地区
+	select 时间,地区，品类，sum(订单金额) from xxx group by 时间，地区，品类
+
+一、概念
+	1. cube:  	cube在OLAP中称为数据立方体！从一个数据集合中，选取多个维度列，
+				再选取一个数据列！基于不同维度列的排列组合查询方式，
+				对一个数据列进行统计，统计的所有结果的结合，称为cube(数据立方体)！
+				
+				例如：选择a表的地区，时间，品类作为维度列，
+					  选取a表的订单金额作为度量列。
+					  此时一共会产生 2的3次方-1种不同维度的组合方案！
+				
+				例如：选择3个维度：  时间，地区，品类
+					  选择2个维度：  地区，品类
+									 时间，品类
+									 时间，地区
+						任选1个维度：时间，
+									 地区，
+									 品类
+	
+	
+	2. cubeid: 从cube中选取一种特定的维度视角查询的结果集合称为cubeid!
+
+	
+	
+二、安装
+	1.环境要求
+		①必须已经安装了hadoop,hive,hbase，已经配置了HADOOP_HOME，HIVE_HOME，HBASE_HOME
+		②使用kylin时，必须启动Hadoop的历史日志服务
+		③集群时间必须同步
+	
+	
+	2.启动
+		bin/kylin.sh start
+		
+		
+		
+三、Kylin的使用步骤简述
+	1.构建一个雪花模型或星型模型
+	
+	2.基于之前的建模构建kylin中的cube（cubeid）
+		基于之前的建模可以构建若干cube（cubeid）
+	
+	3.写sql查询即可
+
+	
+四、具体步骤
+	1. 创建一个Project(库)
+	
+	2. 选中当前的Project，向Project中加载表(hive中)
+			加载一个事实表：  dwd_payment_info
+			加载两个维度表：  dwd_order_info,dwd_user_info
+	
+	3. 建模(星型模型或雪花模型)
+			选择数据的分区时，只能从事实表中选择分区！
+	
+	4. 创建cube
+			注意：要求事实表和维度表在关联时不能出现主键重复的情况！
+				  在关联时，对于每日全量同步的维度表，最好只选择最新的日期的分区数据进行关联！
+					
+			①将最新的分区的数据，查询，写入一个临时表，关联时，指定临时表作为关联的维度表
+			②创建View,将最新的分区的数据，放入视图(虚表)中  (推荐)
+			
+	CREATE VIEW dwd_user_info_view as select * from dwd_user_info
+	WHERE dt='2020-02-16';
+
+	CREATE VIEW dwd_order_info_view as select * from dwd_order_info
+	WHERE dt='2020-02-16';
+
+	
+	5.查询
+			只能写select，支持使用聚集函数和group by 
+			在join时，事实表必须放左边！
+			
+	
+	6.选择拉链表作为维度表时的注意事项
+			dwd_order_info：每日全量-----维度表id不能重复---只能选择今天最新的分区
+					每日增量同步，今天最新的分区只有今天最新的数据，没有之前的数据！
+			
+			dwd_order_info_his：同步所有数据的状态变化，含有全部信息！					
+					如何查询？where end_date='9999-99-99'
+	
+	
+	7.使用RESTAPI，请求构建cube
+			startTime和endtime必须是带毫秒的时间戳！
+			
+			starttime=2020-02-16 00:00:00
+			endtime=2020-02-17 00:00:00
+			
+		为什么脚本中的起始日期，需要往后推8h?
+		
+		KylinServer在执行Job时，使用的是UTC时间！UTC时间固定就比北京小8h!
+		如果直接传入参数，会造成抽取数据的时间，比希望的实际的时间早8h
+		UTC(伦敦时间)+时区差（8h）=本地时间		
+		
+		为什么使用web页面，传入的也是2020-02-16 00:00:00，但是却没有问题：
+			以为在页面时，前端的UI，根据传入的的时间，自动转为GMT+8的时间！
+			将GMT+8时间，传入到服务端，服务端，又使用UTC时间，将GMT+8往前减8h
+			
+		
+	8.Cube的构建
+		a) 从hive中根据选取的维度列和度量列，创建一个宽表
+				①创建宽表
+				②从维度表抽取数据
+				③从事实表抽取数据
+				④向宽表插入数据
+		
+		b) 创建字段的字典
+		
+		c) 构建cubeid
+				①先构建基础的basecubeid 
+					举例一个cube如果有a,b,c,d四个维度
+					先创建 select sum(xx)  from xxx group by a,b,c,d 
+				
+				②基于basecubeid,选择其中一个维度，降维，统计三维的cubeid
+					
+			
+		
+		
+	
+		
+
+

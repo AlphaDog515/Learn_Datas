@@ -1,0 +1,27 @@
+(1)source
+	netcat		必须配置：type,bind,port	
+	exec		必须配置：type,command	
+	spooldir	必须配置: type,spoolDir	
+	taildir		必须配置：type,filegroups
+	avro		必须配置：type,bind,port	
+	
+(2)sink
+	logger 		必须配置：type	可选属性：maxBytesToLog	
+	hdfs		必须配置：type,hdfs.path
+	avro		必须配置：type,hostname,port
+	file_roll	必须配置：type,sink.directory
+	
+	
+	
+(3)channel
+	memery 		必须配置：type	可选属性：capacity	
+	
+(4)	replicating channel selector[默认]	
+	multiplexing channel selector
+	
+(5)	default sink processor
+	failover sink processor	
+	load balancing sink processor
+	
+	
+	

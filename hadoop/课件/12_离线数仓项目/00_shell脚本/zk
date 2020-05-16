@@ -1,0 +1,13 @@
+#!/bin/bash
+if(($#!=1))
+then
+	echo 请输入start或stop或status!
+	exit;
+fi
+
+if [ $1 = start ] || [ $1 = stop ] || [ $1 = status ]
+then
+	xcall zkServer.sh $1
+else
+	echo 请输入start或stop或status!
+fi

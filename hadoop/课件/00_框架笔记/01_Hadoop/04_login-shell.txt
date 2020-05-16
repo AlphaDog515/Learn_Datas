@@ -1,0 +1,49 @@
+登录脚本的执行顺序：【注：仅适用于 bash shell】
+ 
+Login Shell
+    是指登录时，需要提供用户名密码的shell，
+		如：su – user1 , 图形登录， ctrl+alt+F2-6进入的登录界面。
+    这种Login shell  执行脚本的顺序：
+		1. /etc/profile       
+			【全局profile文件;它定义了LoginUser的 PATH, USER, LOGNAME(登录使用者帐号)】
+    
+		2. /etc/profile.d/目录下的脚本
+		
+		3. ～/.bash_profile【搜索命令的路径——————- 登录级别 环境变量配置文件 】
+		
+		4. ～/.bashrc 【存储用户设定的别名和函数 ———- shell级别 环境变量配置文件】
+		
+		5. /etc/bashrc 
+			【全局bashrc文件; 它主要定义一些 Function 和 Alias；
+			更改/etc/bashrc会影响到所有用户,由root用户管理。】
+ 
+ 
+ 
+Non-Login shell
+	登录终端后，使用ssh 登录其他机器！如：ssh hadoop102 jps等价于ssh atguigu@hadoop102 jps
+       非登录shell指的是，不需要输入用户名密码的shell，如图形下 
+			右键terminal，或ctrl+shift+T打开的shell
+     
+	这种Non-Login shell 执行登录脚本的顺序： 
+       1. ~/.bashrc
+       2. /etc/bashrc
+       3. /etc/profile.d/目录下的脚本
+	   没有读取/etc/profile所以读不到JAVA_HOME,需要在.bashrc后面添加source /etc/profile
+	   
+	   
+使用ssh执行命令
+①ssh 目标机器 
+		登录之后，执行某个命令！
+		属于Login-shell，会自动读取 /etc/profile文件中定义的所有的变量！
+		
+②ssh 目标机器  命令
+		属于non-login-shell
+		不会读取/etc/profile
+		
+		如果在使用命令时，我们需要使用/etc/profile定义的一些变量，需要在
+		目标机器的对应的用户的家目录/.bashrc中添加以下代码
+		
+		source /etc/profile
+		
+		如果不添加以上代码，在执行start-all.sh | stop-all.sh一定会报错！	   
+	   

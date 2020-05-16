@@ -1,0 +1,160 @@
+一、分区表
+
+1.简介
+		在建表时，使用create table xxx  partitioned by (分区字段名，分区字段类型,...)来建表，创建的表为分区表！
+		
+		分区表： 分区表的目的是将数据分散到表目录的多个子目录下，在查询时，可以根据分区字段，来过滤查询的数据(使用分区字段过滤)！
+		
+		注意事项：  ①如果表是一个分区表，数据必须存在在最后一级分区目录下
+					②分区表会为每个分区目录存放的数据自动添加上分区对应的字段名和字段值，在查询时，可以使用
+							分区字段
+							
+2.分区操作
+		添加分区：  ①使用load 和insert 向分区表插入数据时，如果分区不存在，系统会自动创建
+					② alter table 表名 add partition(分区字段名=分区字段值) (分区字段名=分区字段值) (分区字段名=分区字段值)...
+					③如果在HDFS上分区目录已经创建成功，且目录名复合分区目录的要求，可以使用
+							msck repair table 表名，自动生成分区
+							
+							
+					在创建分区时，首先要生成分区的元数据，在Mysql的partitions表中生成一条分区的记录！
+								其次在HDFS生成分区的目录！
+							
+							
+		删除分区：  alter table 表名 drop partition(分区字段名=分区字段值),(分区字段名=分区字段值)...
+		
+二、分桶
+1.简介
+		分桶在向一个表插入数据时，就数据分散到多个文件中！这个操作称为分桶操作！
+		
+		分桶的目的将数据分散到多个文件中，分散后可以使用抽样查询，查询感兴趣的样本！
+		
+2.操作
+		
+		①首先需要创建一个分桶表！在创建表时，需要指定分桶的字段，可以选择指定是否在分桶时排序及排序的字段！
+		必须指定要分N个桶！
+		
+		②默认分桶开关是关闭的，需要打开分桶开关
+				set hive.enforce.bucketing=true;
+		 默认排序开关也是关闭的，需要打开排序开关
+				set hive.enforce.sorting=true;
+				
+		③分桶必须经过MR，才可以完成！只能使用Insert 的方式向表导入数据
+		
+		
+3.抽样查询
+		
+		select xxx from 表名 tablesample(bucket x out of y on 分桶字段 )
+
+		要求：  ①y必须是分桶表总桶数z的因子或倍数
+				②  0<x<=y
+				
+		x: 从第几桶开始抽
+		y:  总桶数z/y，代表一共抽取N桶
+		
+		怎么抽： 从第x桶开始抽，每次抽取 第x+(n-1)y桶。
+		
+二、DML
+
+1.导入
+		
+		①load :  load data [local] inpath 'xxx' into table 表名
+					local： 从本地文件系统导入，使用put的方式将数据上传到表目录
+							不带local，从hdfs的路径导入，使用mv的方式将数据移动到表目录
+							
+		②insert:  insert into| overwrite table 表名  select xx | values(),(),()
+						into： 向表中追加记录
+						overwrite: 先清空表，再向表中插入数据
+						
+				  特殊格式： 从一个表查询数据，插入到多个表
+						from 源表
+						insert xxxx  select xxxx
+						insert xxxx  select xxxx
+						insert xxxx  select xxxx
+						
+		③location: 在建表时，将表和数据在hdfs上的路径关联
+		
+		④import :   既可以导入数据，还可以导入数据的表结构！
+						import [external] table 表名  from  'hdfsexportpath' 
+						
+					注意： ①如果要导入的表不存在，hive会自动根据被导入表的结构创建表
+							②如果要导入的表已经存在，hive会先进行元数据的检查，看两个表的结构是否一致，一致再进行导入
+							③要保证，导入的分区在要导入的表中是不存在的
+							
+2.导出
+		①insert: insert  overwrite [local] directory 'xxx'  row format xxxx  select xxx
+
+		②export ：  既导出数据也导出表结构
+						注意： ①可以选择将整个表导出，也可以选择导出某个分区
+								②导出的路径必须是hdfs
+								③导出的元数据是和RDMS无关，在导入时可以导入到任意的RDMS
+								
+								
+三、函数
+1. 查看
+		show functions : 查看所有函数
+		desc function 函数名： 查看某个函数的描述
+		desc function extended 函数名： 查看某个函数的详细描述
+		
+2. 分类
+		按照来源：  ①系统提供的函数
+					②用户自己定义
+					
+		按照类型：  ①udf:  一进一出
+				    ②udaf:  多进一出
+					③udtf:  一进多出
+					
+					
+四、排序相关
+
+  order by : 全排序。使用一个reduceTask，对指定的字段进行排序
+  sort by : 部分排序！使用N个reduceTask，对指定的字段进行排序。
+				需要先设置numReduceTasks！
+  distribute by : 指定排序时，使用哪个字段分区
+  cluster by :  sort by 和 distribute by 的字段是一致，可以简写为cluster by!
+					cluster by默认只能按照asc排序，不能指定排序方式
+					
+五、查询
+
+1.查询语句和mysql不一致的地方
+		A <=> B :  ①A,B都为null,返回true
+				   ②A,B一方为null，返回null
+				   ③A,B都不为null，等同于A=B
+				   
+		A Rlike B :  B是一个正则表达式，判断A是否负责B表达式的要求，返回true和false
+		
+		在关联时，只支持等值连接！
+		
+		在管理时，支持满连接，使用full join!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				
+		
+		
+		
+
+		
+		
+		
+
+
+
+
+		
+		
+					

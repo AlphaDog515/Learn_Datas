@@ -1,0 +1,228 @@
+前一天复习
+一、ExecSource有丢失数据的可能
+		原因：execsource是一个异步的source，这个source一旦在source写入到channel故障时，
+			  无法通知数据源的客户端！这样有丢失数据的风险！
+				
+		建议使用spoolingdirsource和taildirsource
+		
+二、spoolingdirsource
+		spoolingdirsource固定监控一个目录(spoolingdir)新产生的文件！
+		一旦有新的文件产生，就将新的文件的内容上传，
+		上传后使用删除策略或改名机制，以区分哪些是需要处理的文件，哪些是已经处理完成的！
+		
+		注意事项： ①在目录的文件一旦放入目录就不能被修改
+				   ②放入目录的文件不能重名
+				   
+		一旦有上述其中之一的情况发生，此时flume进程停止！
+		
+三、taildirsource
+		taildirsource可以同时监控多个文件，实时监控文件新写入的内容，将新写入的内容上传！
+		
+		taildirsource不丢数据的原因在于，每次tail操作后，
+		taildirsource都会将每个文件tail的最后位置记录在一个json文件中！
+		只要json文件不丢失，那么就可以保证数据准确安全！
+		
+		注意：  同一个文件，在采集过程中，是不能被重命名，
+				这样如果重命名后的文件依然被taildirsource的匹配规则匹配到！
+				此时就可能发生数据重复采集！
+					
+四、AvroSource和AvroSink
+		一般当发生两个agent串联工作时！ 
+		需要由第一个Agent使用avrosink将event传递给第二个sink的avrosouce!
+		
+		AvroSource和AvroSink的主机名和绑定的端口的配置一致！
+		
+		
+五、FILERoll_sink
+		将event写入到本地的文件系统中，可以设置每间隔多久滚动文件！
+		
+六、ChannelSelector
+	1.Replicating（默认）: 当一个source选择了多个channel后，event会复制到每一个channel中！
+
+	2.MultiPlexing：根据eventheader中指定的key的值和用户配置的映射信息，
+		根据规则将event分发到指定的channel！
+
+七、Sink Processor
+	1. Default Sink Processor
+		当只有一个channel只对接一个sink时，使用Default Sink Processor，Default Sink Processor不要求
+		用户配置sink组的信息
+				
+	2. FailOverSink Processor
+		故障转移的sink 处理器！工作原理是维护一个有优先级的sink组！从组中挑选优先级最高的sink,
+		来channel中拉取数据，一旦正在工作的sink故障，
+		此时从剩余的sink中再挑选优先级高的sink继续替换之前的sink工作！
+				
+				
+3. Load Balance Sink Processor
+	从一个组中，使用负载均衡的算法(round_rabin | random)，挑选sink来工作！
+	一个组中的多个sink，可以做到负载均衡！
+	
+
+	
+八、事务
+	1. put事务
+		put事务指source将event放入channel的过程中，开启的事务！
+				
+		流程：source将封装好的event，先放入到putList(事务开启的缓冲区)，
+			一批event在放入putList期间，如果发生了异常，就回滚事务，此时清空putList!
+			如果没有发生异常，那么就提交事务，提交事务将event放入到channel中！
+
+
+	2. take事务
+		take事务指sink从channel中拉取event，将event写入到目的地期间开启的事务！
+		
+		流程：sink从channel中拉取event，拉取后将event移动到takeList(事务开启的缓冲区)，
+		将takeList中的event写出到目的地，一旦一批event中，其中的一个event写出失败，
+		那么就回滚事务，将takeList中所有的一批event回滚到channel!
+			
+		如果没有异常，就提交事务，清空takeList!
+		
+			
+	3. 参数关系
+		batchSize： 在source和sink中配置！
+					batchSize越大，可以提升吞吐率！
+						
+					batchSize<= transactionCapacity
+						
+		transactionCapacity: 事务的缓冲区可以放入的最大的event数量！
+					在channel中配置！
+						
+					transactionCapacity<=capatity
+						
+		capatity:  channel的容量！
+
+		batchSize<= transactionCapacity <=capatity
+		
+		
+九、自定义Source
+	1.自定义类，继承AbstractSource，实现Configurable和PollableSource接口
+	
+	2.实现process()方法
+			返回Status对象！
+				READY：  一旦成功封装了1个或多个event，放入到channel!
+				BACKOFF:  如果没有封装event或放入到channel失败！
+				
+		process()被PollableSourceRunner线程循环调用！
+		
+	3.从configure()中获取配置文件中配置的参数值
+			context.getxxx("参数名","默认值")
+
+
+
+
+			
+一、监控
+
+1.如何实现监控
+	在使用flume期间，我们需要监控什么？
+		channel当前的容量是多少？
+		channel当前已经使用了多少容量？
+		source向channel中put成功了多少个event?
+		sink从channel中take成功了多少个event?
+	借助JMX技术！
+	
+2. JMX
+	J2EE定义了14种技术规范！
+		JDBC：java连接数据库的技术规范！
+		Servlet: 所有javaweb写的程序，都最终使用Servlet完成请求的接受和响应
+		
+		JMX(java monitor extension)： java的监控扩展模块
+			JMX可以帮助我们实时监控一个java进程中需要了解的参数，
+			可以实时修改java进程中某个对象的参数！
+				
+			①MBean(monitor bean): 监控的参数封装的Bean
+			②JMX的monitor服务，这个服务可以在程序希望获取到MBean参数时，
+				来请求服务，请求后服务帮我们对MBean的参数进行读写！				
+				flume已经提供了基于JMX的服务实现，如果我们希望使用，只需要启动此服务即可！
+				
+			③客户端，客户端帮我们来向JMX服务发送请求，显示服务返回的Mbean的结果
+				
+3. 客户端
+	①使用JCONSOLE程序查看
+		在flume的conf/env.sh文件中，配置
+		export JAVA_OPTS=”-Dcom.sun.management.jmxremote 
+						-Dcom.sun.management.jmxremote.port=5445 
+						-Dcom.sun.management.jmxremote.authenticate=false 
+						-Dcom.sun.management.jmxremote.ssl=false”
+	②使用web浏览器向JMX服务发请求查看
+		使用JSON Reporting
+		bin/flume-ng agent --conf-file example.conf 
+		--name a1 -Dflume.monitoring.type=http 
+		-Dflume.monitoring.port=34545
+		
+	③使用第三方框架，例如Ganglia
+		可视化MBean：内置一个可以处理Http请求的服务器(PHP)
+				ganglia-web(选集群的一台机器安装)
+				
+		数据库：需要把采集到的MBean的信息写入到数据库，在查询时，从数据库查询，返回结果
+				ganglia-gmetad(选集群的一台机器)负责将每台机器ganglia-gmond收集的数据汇总，
+				汇总后存入数据库rrdtool
+				
+		收集数据的服务：需要在每个机器都部署一个收集本台机器上运行的进程的指标的服务，此服务
+						将收集的指标数据汇总到数据库中，由PHP程序来查询
+						ganglia-gmond(需要采集哪个机器的指标，就在哪个机器安装)负责监控MBean，
+						采集数据！
+							
+		
+		开源方案：  ①需要有一个可以请求JMX服务的框架  JMXTrans
+					②需要有一个数据库(时序数据库最佳)，数据来存储采集到的信息  Influxdb
+					③可视化框架来显示指标   Graffna
+
+	
+		
+		
+一、Kafka的主题操作
+
+	主题信息属于kafka的元数据，存储在zookeeper中！ /brokers/topics/
+	1. 创建主题
+		①kafka-topics.sh --zookeeper hadoop102:2181 
+		--create --topic hello --partitions 2 --replication-factor 2
+		
+		必须指定分区数和副本数！
+		每个broker最多存储一份副本，所以在创建主题时，副本数不能超过当前可用的broker的数量！
+		kafka集群根据负载均衡的策略，自动将分区分配到对应的broker实例中！
+		
+		②明确告诉kafka，创建多少个分区，以及每个分区的副本到底选择哪个broker
+		
+		kafka-topics.sh --zookeeper hadoop102:2181  
+		--create --topic hello2  --replica-assignment 101:102,102:103
+		
+
+
+2. 查询所有的主题
+		kafka-topics.sh --zookeeper hadoop102:2181 --list
+		
+	3. 查看某个主题详细信息
+		kafka-topics.sh --zookeeper hadoop102:2181 --describe --topic hello
+			
+	4. 修改主题
+		只能修改分区数(只允许增加不允许减少)和副本的放置策略
+		bin/kafka-topics.sh --zookeeper hadoop102:2181 
+		--alter  --topic hello2   --partitions 3
+		
+		ToDO:
+		bin/kafka-topics.sh --zookeeper hadoop102:2181 
+		--alter  --topic hello2  --replica-assignment 102:103,101:102,101:103
+			
+	5. 删除主题
+		bin/kafka-topics.sh --zookeeper hadoop102:2181 --delete --topic hello1
+			
+二、生产数据
+		kafka提供了用于测试的producer
+		如果没有指定分区，按照默认的分区策略存储
+		bin/kafka-console-producer.sh --topic hello2 --broker-list hadoop102:9092
+		
+三、消费者
+		bin/kafka-console-consumer.sh --bootstrap-server hadoop102:9092 --topic hello2
+		消费者消费数据时，如果不指定offset，默认是从每个分区的最后一个位置开始消费！
+		消费者消费数据时，只能保证分区内部有序！和生成数据时的顺序是无关的！
+		如果希望数据整体有序，只能是一个主题只有一个分区！
+
+
+
+
+
+
+
+
+		

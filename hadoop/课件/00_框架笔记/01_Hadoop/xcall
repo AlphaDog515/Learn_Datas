@@ -1,0 +1,18 @@
+#!/bin/bash
+# 在集群上的所有机器执行同一条命令
+if(($#==0))
+then
+	echo 请输入要操作的命令！
+	exit
+fi
+
+echo 要执行的命令是$*
+
+# 循环执行此命令
+for((i=102;i<=104;i++))
+do
+	echo -------------hadoop$i----------------
+	ssh hadoop$i $*
+done
+
+
